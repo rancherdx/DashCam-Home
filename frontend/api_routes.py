@@ -1,39 +1,10 @@
-from flask import Blueprint, request, jsonify, send_file, abort, current_app
+from flask import Blueprint, request, jsonify, abort, current_app, send_from_directory
 import logging
 from pathlib import Path
 from functools import wraps
 from datetime import datetime, timedelta
-import secrets
 
 logger = logging.getLogger(__name__)
-
-def token_required(f):
-    """Decorator to require authentication token for API endpoints"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Skip authentication in development if disabled
-        if current_app.config.get('ENV') == 'development' and current_app.config.get('DISABLE_AUTH'):
-            return f(*args, **kwargs)
-            
-        token = request.headers.get('X-Auth-Token') or request.args.get('token')
-        if not token or token != current_app.config.get('API_TOKEN'):
-            logger.warning(f"Unauthorized access attempt with token: {token}")
-            abort(401)
-        return f(*args, **kwargs)
-    return decorated_function
-
-def stream_token_required(f):
-    """Decorator for stream token authentication"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        camera_id = kwargs.get('camera_id')
-        token = request.args.get('token')
-        
-        if not token or not stream_processor.verify_stream_token(camera_id, token):
-            logger.warning(f"Invalid stream token for camera {camera_id}")
-            abort(401)
-        return f(*args, **kwargs)
-    return decorated_function
 
 def create_api_routes(camera_manager, stream_processor, onvif_controller, recording_manager):
     api_bp = Blueprint('api', __name__)
@@ -44,10 +15,37 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     api_bp.onvif_controller = onvif_controller
     api_bp.recording_manager = recording_manager
     
+    def token_required(f):
+        """Decorator to require authentication token for API endpoints"""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Skip authentication in development if disabled
+            if current_app.config.get('ENV') == 'development' and current_app.config.get('DISABLE_AUTH'):
+                return f(*args, **kwargs)
+
+            token = request.headers.get('X-Auth-Token') or request.args.get('token')
+            if not token or token != current_app.config.get('API_TOKEN'):
+                logger.warning(f"Unauthorized access attempt with token: {token}")
+                abort(401)
+            return f(*args, **kwargs)
+        return decorated_function
+
+    def stream_token_required(f):
+        """Decorator for stream token authentication"""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            camera_id = kwargs.get('camera_id')
+            token = request.args.get('token')
+
+            if not token or not stream_processor.verify_stream_token(camera_id, token):
+                logger.warning(f"Invalid stream token for camera {camera_id}")
+                abort(401)
+            return f(*args, **kwargs)
+        return decorated_function
+
     @api_bp.route('/api/auth/login', methods=['POST'])
     def login():
         """Login endpoint to get API token"""
-        data = request.json
         # In a real application, you'd validate credentials here
         # For simplicity, we're using a single API token
         return jsonify({
@@ -164,8 +162,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @api_bp.route('/api/snapshot/<camera_id>', methods=['POST'])
     @token_required
     def take_snapshot(camera_id):
-        # Implementation for taking snapshot
-        filename = recording_manager.take_snapshot(camera_id, b'')  # Empty bytes for demo
+        filename = recording_manager.take_snapshot(camera_id)
         return jsonify({'success': bool(filename), 'filename': filename})
     
     @api_bp.route('/api/recording/start/<camera_id>', methods=['POST'])
