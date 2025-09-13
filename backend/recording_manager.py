@@ -7,16 +7,19 @@ from typing import List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .camera_manager import CameraManager
+    from .settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger('audit.events')
 
 
 class RecordingManager:
-    def __init__(self, snapshots_dir: str, clips_dir: str, thumbnails_dir: str):
+    def __init__(self, snapshots_dir: str, clips_dir: str, thumbnails_dir: str, settings_manager: "SettingsManager"):
         self.snapshots_dir = Path(snapshots_dir)
         self.clips_dir = Path(clips_dir)
         self.thumbnails_dir = Path(thumbnails_dir)
-        self.camera_manager: "CameraManager" = None
+        self.settings_manager = settings_manager
+        self.camera_manager: "CameraManager" = None  # Injected after init
 
         self.recording_processes: Dict[str, subprocess.Popen] = {}
 
@@ -32,7 +35,6 @@ class RecordingManager:
 
         rtsp_uri = self.camera_manager.onvif_controller.get_rtsp_uri(camera_id)
         if not rtsp_uri:
-            # Fallback for non-ONVIF cameras
             rtsp_port = camera.get('rtsp_port', 554)
             rtsp_path = camera.get('rtsp_path', '/stream1')
             rtsp_uri = (f"rtsp://{camera['username']}:{camera['password']}"
@@ -52,10 +54,9 @@ class RecordingManager:
         ]
 
         try:
-            # Run FFmpeg and wait for it to complete
             process = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if process.returncode == 0:
-                logger.info(f"Snapshot saved: {filename}")
+                audit_logger.info(f"SNAPSHOT - Camera: {camera_id}, File: {filename}")
                 return filename
             else:
                 logger.error(f"FFmpeg failed to take snapshot for {camera_id}. Error: {process.stderr}")
@@ -89,10 +90,10 @@ class RecordingManager:
             "ffmpeg",
             "-rtsp_transport", "tcp",
             "-i", rtsp_uri,
-            "-c", "copy",  # Re-mux instead of re-encoding for efficiency
+            "-c", "copy",
             "-map", "0",
             "-f", "segment",
-            "-segment_time", "600",  # 10 minute segments
+            "-segment_time", "600",
             "-segment_format", "mp4",
             "-strftime", "1",
             f"{str(self.clips_dir)}/{camera_id}_%Y%m%d-%H%M%S.mp4"
@@ -101,8 +102,7 @@ class RecordingManager:
         try:
             process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.recording_processes[camera_id] = process
-            logger.info(f"Started recording for camera {camera_id}.")
-            # Since we are creating segmented files, we return the pattern
+            audit_logger.info(f"REC_START - Camera: {camera_id}")
             return f"{camera_id}_recording_active"
         except Exception as e:
             logger.error(f"Failed to start recording for {camera_id}: {e}")
@@ -116,12 +116,11 @@ class RecordingManager:
 
         process = self.recording_processes[camera_id]
         try:
-            # FFmpeg needs 'q' to be sent to stdin to stop gracefully
             process.stdin.write(b'q')
             process.stdin.flush()
             process.wait(timeout=10)
-            logger.info(f"Recording stopped for camera {camera_id}.")
-        except (subprocess.TimeoutExpired, OSError):  # OSError if pipe is closed
+            audit_logger.info(f"REC_STOP - Camera: {camera_id}")
+        except (subprocess.TimeoutExpired, OSError):
             process.kill()
             logger.warning(f"Recording process for {camera_id} did not terminate gracefully, killing.")
         except Exception as e:
@@ -133,10 +132,10 @@ class RecordingManager:
     def get_recordings(self, camera_id: str = None, hours: int = 7) -> List[dict]:
         recordings = []
         try:
-            cutoff_time = datetime.now() - timedelta(hours=hours)
-
+            # Use retention period from settings, with 'hours' as a fallback
+            retention_hours = self.settings_manager.get_setting('storage.retention_period_hours', hours)
+            cutoff_time = datetime.now() - timedelta(hours=retention_hours)
             glob_pattern = f"{camera_id}_*.mp4" if camera_id else "*.mp4"
-
             for file in self.clips_dir.glob(glob_pattern):
                 try:
                     file_mod_time = datetime.fromtimestamp(file.stat().st_mtime)
@@ -149,7 +148,6 @@ class RecordingManager:
                         })
                 except Exception as e:
                     logger.error(f"Could not process file {file.name}: {e}")
-
             return sorted(recordings, key=lambda x: x['created'], reverse=True)
         except Exception as e:
             logger.error(f"Error getting recordings: {e}")
@@ -159,25 +157,21 @@ class RecordingManager:
         logger.info("Cleanup thread started.")
         while True:
             try:
-                # Default retention from config, can be made configurable
-                retention = timedelta(hours=7)
-                cutoff_time = datetime.now() - retention
+                retention_hours = self.settings_manager.get_setting('storage.retention_period_hours', 7)
+                if self.settings_manager.get_setting('storage.auto_cleanup', True):
+                    cutoff_time = datetime.now() - timedelta(hours=retention_hours)
+                    for directory in [self.snapshots_dir, self.clips_dir, self.thumbnails_dir]:
+                        if not directory.exists():
+                            continue
+                        for file in directory.glob("*"):
+                            try:
+                                if datetime.fromtimestamp(file.stat().st_mtime) < cutoff_time:
+                                    file.unlink()
+                                    logger.info(f"Cleaned up old file: {file.name}")
+                            except Exception as e:
+                                logger.error(f"Error cleaning up file {file}: {e}")
 
-                for directory in [self.snapshots_dir, self.clips_dir, self.thumbnails_dir]:
-                    if not directory.exists():
-                        continue
-
-                    for file in directory.glob("*"):
-                        try:
-                            if datetime.fromtimestamp(file.stat().st_mtime) < cutoff_time:
-                                file.unlink()
-                                logger.info(f"Cleaned up old file: {file.name}")
-                        except Exception as e:
-                            logger.error(f"Error cleaning up file {file}: {e}")
-
-                # Wait for 1 hour before next cleanup cycle
                 threading.Event().wait(3600)
             except Exception as e:
                 logger.error(f"Error in cleanup thread: {e}")
-                # Wait 5 minutes on error before retrying
                 threading.Event().wait(300)
