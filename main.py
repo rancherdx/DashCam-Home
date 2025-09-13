@@ -1,80 +1,70 @@
+from flask import Flask, jsonify, render_template, send_from_directory, current_app, request
 import logging
 import os
-
-from flask import (Flask, jsonify, render_template, send_from_directory,
-                   current_app, request)
-
 import subprocess
+
 from backend.camera_manager import CameraManager
 from backend.stream_processor import StreamProcessor
 from backend.onvif_controller import ONVIFController
 from backend.recording_manager import RecordingManager
+from backend.settings_manager import SettingsManager
+from backend.motion_detector import MotionDetector
+from backend.logger_setup import setup_logging, check_ffmpeg
 from frontend.api_routes import create_api_routes
-from config import SNAPSHOTS_DIR, CLIPS_DIR, THUMBNAILS_DIR, HLS_OUTPUT_DIR, LOGS_DIR
-
-logger = logging.getLogger(__name__)
-
-
-def setup_logging(log_level: str = "INFO"):
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(os.path.join(LOGS_DIR, "app.log"))
-        ]
-    )
-
-
-def check_ffmpeg() -> bool:
-    """Checks if FFmpeg is installed and accessible."""
-    try:
-        result = subprocess.run(
-            ['ffmpeg', '-version'],
-            capture_output=True, text=True, timeout=5
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-
+from config import SNAPSHOTS_DIR, CLIPS_DIR, THUMBNAILS_DIR, HLS_OUTPUT_DIR
 
 # Setup logging
 setup_logging()
-
+logger = logging.getLogger(__name__)
 
 def create_app():
     app = Flask(__name__)
 
-    # Configuration
-    def str_to_bool(val):
-        return val.lower() in ('true', '1', 'yes')
+    # Initialize settings manager first
+    app.settings_manager = SettingsManager()
+    settings = app.settings_manager.get_all_settings()
 
+    # Configuration
     app.config.update({
         'SECRET_KEY': os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production'),
         'API_TOKEN': os.environ.get('API_TOKEN', 'dev-api-token-change-in-production'),
-        'CLOUDFLARE_TUNNEL': str_to_bool(os.environ.get('CLOUDFLARE_TUNNEL', 'False')),
-        'CLOUDFLARE_DOMAIN': os.environ.get('CLOUDFLARE_DOMAIN', ''),
+        'CLOUDFLARE_TUNNEL': settings.get('cloudflare', {}).get('enable_https', False),
+        'CLOUDFLARE_DOMAIN': settings.get('cloudflare', {}).get('domain', ''),
     })
 
-    # Initialize components
+    # Initialize other components
     app.stream_processor = StreamProcessor(cloudflare_enabled=app.config['CLOUDFLARE_TUNNEL'])
     app.onvif_controller = ONVIFController()
+    app.recording_manager = RecordingManager(
+        SNAPSHOTS_DIR,
+        CLIPS_DIR,
+        THUMBNAILS_DIR,
+        settings_manager=app.settings_manager
+    )
     app.camera_manager = CameraManager(
         stream_processor=app.stream_processor,
-        onvif_controller=app.onvif_controller
+        onvif_controller=app.onvif_controller,
+        settings_manager=app.settings_manager
     )
-    app.recording_manager = RecordingManager(SNAPSHOTS_DIR, CLIPS_DIR, THUMBNAILS_DIR)
 
     # Wire up circular dependencies
     app.camera_manager.recording_manager = app.recording_manager
     app.recording_manager.camera_manager = app.camera_manager
 
+    # Initialize and start motion detector
+    app.motion_detector = MotionDetector(
+        camera_manager=app.camera_manager,
+        recording_manager=app.recording_manager,
+        settings_manager=app.settings_manager
+    )
+
     # Register API routes
     api_blueprint = create_api_routes(
-        app.camera_manager,
-        app.stream_processor,
-        app.onvif_controller,
-        app.recording_manager
+        camera_manager=app.camera_manager,
+        stream_processor=app.stream_processor,
+        onvif_controller=app.onvif_controller,
+        recording_manager=app.recording_manager,
+        settings_manager=app.settings_manager
     )
     app.register_blueprint(api_blueprint, url_prefix='/api')
 
@@ -147,15 +137,15 @@ def create_app():
 
     return app
 
-
 if __name__ == "__main__":
     app = create_app()
 
-    # Check for FFmpeg
+    # Start motion detection service
+    app.motion_detector.start()
+
     if not check_ffmpeg():
         logger.warning("FFmpeg not found. Please install FFmpeg for streaming functionality.")
 
-    # Environment check
     if app.config['SECRET_KEY'] == 'dev-secret-key-change-in-production':
         logger.warning("Using default secret key! Set SECRET_KEY environment variable for production.")
 

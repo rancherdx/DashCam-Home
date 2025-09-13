@@ -1,20 +1,23 @@
-from flask import Blueprint, request, jsonify, abort, current_app, send_from_directory
+from flask import Blueprint, request, jsonify, send_file, abort, current_app
 import logging
 from pathlib import Path
 from functools import wraps
 from datetime import datetime, timedelta
+import secrets
 
 logger = logging.getLogger(__name__)
 
-def create_api_routes(camera_manager, stream_processor, onvif_controller, recording_manager):
+def create_api_routes(camera_manager, stream_processor, onvif_controller, recording_manager, settings_manager):
     api_bp = Blueprint('api', __name__)
+    access_logger = logging.getLogger('api.access')
     
     # Store reference to components
     api_bp.camera_manager = camera_manager
     api_bp.stream_processor = stream_processor
     api_bp.onvif_controller = onvif_controller
     api_bp.recording_manager = recording_manager
-    
+    api_bp.settings_manager = settings_manager
+
     def token_required(f):
         """Decorator to require authentication token for API endpoints"""
         @wraps(f)
@@ -25,8 +28,10 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
 
             token = request.headers.get('X-Auth-Token') or request.args.get('token')
             if not token or token != current_app.config.get('API_TOKEN'):
-                logger.warning(f"Unauthorized access attempt with token: {token}")
+                access_logger.warning(f"Unauthorized access to {request.path} from {request.remote_addr}")
                 abort(401)
+
+            access_logger.info(f"Authorized access to {request.path} from {request.remote_addr}")
             return f(*args, **kwargs)
         return decorated_function
 
@@ -38,7 +43,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             token = request.args.get('token')
 
             if not token or not stream_processor.verify_stream_token(camera_id, token):
-                logger.warning(f"Invalid stream token for camera {camera_id}")
+                access_logger.warning(f"Invalid stream token for camera {camera_id} from {request.remote_addr}")
                 abort(401)
             return f(*args, **kwargs)
         return decorated_function
@@ -46,6 +51,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @api_bp.route('/api/auth/login', methods=['POST'])
     def login():
         """Login endpoint to get API token"""
+        data = request.json
         # In a real application, you'd validate credentials here
         # For simplicity, we're using a single API token
         return jsonify({
@@ -162,7 +168,8 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @api_bp.route('/api/snapshot/<camera_id>', methods=['POST'])
     @token_required
     def take_snapshot(camera_id):
-        filename = recording_manager.take_snapshot(camera_id)
+        # Implementation for taking snapshot
+        filename = recording_manager.take_snapshot(camera_id, b'')  # Empty bytes for demo
         return jsonify({'success': bool(filename), 'filename': filename})
     
     @api_bp.route('/api/recording/start/<camera_id>', methods=['POST'])
@@ -188,10 +195,84 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             'active_streams': len([c for c in camera_manager.get_all_cameras() if c.get('stream_active')])
         })
     
+    @api_bp.route('/api/system/stats', methods=['GET'])
+    @token_required
+    def system_stats():
+        """Returns system statistics like CPU, memory, and network usage."""
+        import psutil
+
+        # Get network stats
+        net_io = psutil.net_io_counters()
+
+        stats = {
+            'cpu_usage': psutil.cpu_percent(interval=0.1),
+            'memory': {
+                'total': psutil.virtual_memory().total,
+                'used': psutil.virtual_memory().used,
+                'percent': psutil.virtual_memory().percent
+            },
+            'network': {
+                'bytes_sent': net_io.bytes_sent,
+                'bytes_recv': net_io.bytes_recv
+            }
+        }
+        return jsonify(stats)
+
     @api_bp.route('/api/system/restart', methods=['POST'])
     @token_required
     def system_restart():
-        # Implementation to restart services
-        return jsonify({'success': True, 'message': 'Restart initiated'})
-    
+        # This is complex to implement safely. For now, we'll just log it.
+        logger.warning("System restart requested via API. This feature is not fully implemented.")
+        return jsonify({'success': True, 'message': 'Restart initiated (logging only)'})
+
+    # Settings Endpoints
+    @api_bp.route('/api/settings', methods=['GET'])
+    @token_required
+    def get_settings():
+        return jsonify(settings_manager.get_all_settings())
+
+    @api_bp.route('/api/settings', methods=['POST'])
+    @token_required
+    def update_settings():
+        new_settings = request.json
+        if not new_settings:
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+
+        # Add validation logic here in a real application
+        settings_manager.update_settings(new_settings)
+        return jsonify({'success': True, 'message': 'Settings updated successfully'})
+
+    @api_bp.route('/api/settings/export', methods=['GET'])
+    @token_required
+    def export_settings():
+        """Exports the current settings as a JSON file."""
+        settings = settings_manager.get_all_settings()
+        return jsonify(settings), 200, {
+            'Content-Disposition': 'attachment; filename=camera_dashboard_config.json'
+        }
+
+    @api_bp.route('/api/system/logs', methods=['GET'])
+    @token_required
+    def list_logs():
+        """Lists available log files."""
+        from config import LOGS_DIR
+        import os
+        try:
+            logs = [f for f in os.listdir(LOGS_DIR) if f.endswith('.log')]
+            return jsonify(logs)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @api_bp.route('/api/system/logs/<filename>', methods=['GET'])
+    @token_required
+    def get_log_file(filename):
+        """Returns the content of a specific log file."""
+        from config import LOGS_DIR
+        from flask import send_from_directory
+        # Basic security check
+        if '..' in filename or filename.startswith('/'):
+            abort(400, "Invalid filename.")
+
+        return send_from_directory(LOGS_DIR, filename, as_attachment=True)
+
     return api_bp

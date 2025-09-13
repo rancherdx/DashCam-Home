@@ -8,6 +8,7 @@
         <button class="tab-btn active" onclick="openSettingsTab('general-tab')">General</button>
         <button class="tab-btn" onclick="openSettingsTab('storage-tab')">Storage</button>
         <button class="tab-btn" onclick="openSettingsTab('cloudflare-tab')">Cloudflare</button>
+        <button class="tab-btn" onclick="openSettingsTab('motion-tab')">Motion</button>
         <button class="tab-btn" onclick="openSettingsTab('system-tab')">System</button>
     </div>
 
@@ -110,6 +111,18 @@
         </form>
     </div>
 
+    <!-- Motion Detection Settings -->
+    <div id="motion-tab" class="settings-tab">
+        <form class="settings-form">
+            <h3>Motion Detection Settings</h3>
+            <p>Configure motion detection for each camera. Recordings will be triggered automatically.</p>
+            <div id="motion-camera-list">
+                <!-- Camera-specific settings will be dynamically inserted here -->
+            </div>
+            <button type="submit" class="btn-primary">Save Motion Settings</button>
+        </form>
+    </div>
+
     <!-- System Settings -->
     <div id="system-tab" class="settings-tab">
         <div class="system-info">
@@ -145,6 +158,8 @@
         </div>
     </div>
 </div>
+
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 
 <script>
 function openSettingsTab(tabId) {
