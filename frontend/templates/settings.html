@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="settings-container">
+    <h1>Settings</h1>
+    
+    <div class="settings-tabs">
+        <button class="tab-btn active" onclick="openSettingsTab('general-tab')">General</button>
+        <button class="tab-btn" onclick="openSettingsTab('storage-tab')">Storage</button>
+        <button class="tab-btn" onclick="openSettingsTab('cloudflare-tab')">Cloudflare</button>
+        <button class="tab-btn" onclick="openSettingsTab('system-tab')">System</button>
+    </div>
+
+    <!-- General Settings -->
+    <div id="general-tab" class="settings-tab active">
+        <form class="settings-form">
+            <div class="form-group">
+                <label>Dashboard Name</label>
+                <input type="text" name="dashboard_name" value="Camera Dashboard">
+            </div>
+            
+            <div class="form-group">
+                <label>Default Stream Quality</label>
+                <select name="stream_quality">
+                    <option value="high">High (1080p)</option>
+                    <option value="medium" selected>Medium (720p)</option>
+                    <option value="low">Low (480p)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Auto-Start Streams</label>
+                <input type="checkbox" name="auto_start" checked>
+            </div>
+            
+            <button type="submit" class="btn-primary">Save Settings</button>
+        </form>
+    </div>
+
+    <!-- Storage Settings -->
+    <div id="storage-tab" class="settings-tab">
+        <div class="storage-stats">
+            <div class="stat-card">
+                <h3>Snapshot Storage</h3>
+                <p class="stat-value">2.3 GB / 7 hours</p>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 65%"></div>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Video Storage</h3>
+                <p class="stat-value">15.8 GB / 7 hours</p>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 85%"></div>
+                </div>
+            </div>
+        </div>
+
+        <form class="settings-form">
+            <div class="form-group">
+                <label>Retention Period</label>
+                <select name="retention_period">
+                    <option value="1">1 hour</option>
+                    <option value="3">3 hours</option>
+                    <option value="7" selected>7 hours</option>
+                    <option value="24">24 hours</option>
+                    <option value="168">7 days</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Auto Cleanup</label>
+                <input type="checkbox" name="auto_cleanup" checked>
+            </div>
+            
+            <button type="submit" class="btn-primary">Save Storage Settings</button>
+        </form>
+    </div>
+
+    <!-- Cloudflare Settings -->
+    <div id="cloudflare-tab" class="settings-tab">
+        <div class="cloudflare-status">
+            <h3>Cloudflare Tunnel Status</h3>
+            <div class="status-indicator online">Connected</div>
+            <p>Domain: cameras.yourdomain.com</p>
+        </div>
+
+        <form class="settings-form">
+            <div class="form-group">
+                <label>Cloudflare Tunnel Domain</label>
+                <input type="text" name="cloudflare_domain" value="cameras.yourdomain.com">
+            </div>
+            
+            <div class="form-group">
+                <label>Enable HTTPS</label>
+                <input type="checkbox" name="enable_https" checked>
+            </div>
+            
+            <div class="form-group">
+                <label>Access Protection</label>
+                <select name="access_protection">
+                    <option value="public">Public</option>
+                    <option value="token" selected>Token Required</option>
+                    <option value="whitelist">IP Whitelist</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="btn-primary">Update Cloudflare Settings</button>
+        </form>
+    </div>
+
+    <!-- System Settings -->
+    <div id="system-tab" class="settings-tab">
+        <div class="system-info">
+            <h3>System Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">CPU Usage:</span>
+                    <span class="info-value">25%</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Memory Usage:</span>
+                    <span class="info-value">512 MB / 2 GB</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">GPU Acceleration:</span>
+                    <span class="info-value">Enabled (NVIDIA)</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Uptime:</span>
+                    <span class="info-value">2 days, 5 hours</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="system-actions">
+            <h3>Actions</h3>
+            <div class="action-buttons">
+                <button onclick="restartService()" class="btn-warning">Restart Service</button>
+                <button onclick="clearCache()" class="btn-secondary">Clear Cache</button>
+                <button onclick="exportConfig()" class="btn-secondary">Export Configuration</button>
+                <button onclick="showLogs()" class="btn-secondary">View Logs</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openSettingsTab(tabId) {
+    // Hide all tabs
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabId).classList.add('active');
+    
+    // Update active tab button
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.currentTarget.classList.add('active');
+}
+
+// Form submission
+document.querySelectorAll('.settings-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+        
+        try {
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                alert('Settings saved successfully!');
+            } else {
+                alert('Error saving settings');
+            }
+        } catch (error) {
+            alert('Error saving settings: ' + error.message);
+        }
+    });
+});
+
+function restartService() {
+    if (confirm('Are you sure you want to restart the service?')) {
+        fetch('/api/system/restart', { method: 'POST' })
+            .then(() => alert('Service restarting...'))
+            .catch(err => alert('Error: ' + err.message));
+    }
+}
+
+function clearCache() {
+    if (confirm('Clear all cached data?')) {
+        fetch('/api/system/clear-cache', { method: 'POST' })
+            .then(() => alert('Cache cleared'))
+            .catch(err => alert('Error: ' + err.message));
+    }
+}
+
+function exportConfig() {
+    window.open('/api/settings/export', '_blank');
+}
+
+function showLogs() {
+    window.open('/api/system/logs', '_blank');
+}
+</script>
+
+<style>
+.settings-container {
+    padding: 20px;
+    max-width: 800px;
+}
+
+.settings-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ddd;
+}
+
+.settings-tab {
+    display: none;
+}
+
+.settings-tab.active {
+    display: block;
+}
+
+.settings-form {
+    max-width: 500px;
+}
+
+.storage-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.progress-bar {
+    height: 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress {
+    height: 100%;
+    background: #3498db;
+    border-radius: 4px;
+}
+
+.cloudflare-status {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.system-info {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.info-label {
+    font-weight: 500;
+}
+
+.info-value {
+    color: #666;
+}
+
+.system-actions {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.action-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.btn-warning {
+    background: #f39c12;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #e67e22;
+}
+
+.btn-secondary {
+    background: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #7f8c8d;
+}
+</style>
+{% endblock %}

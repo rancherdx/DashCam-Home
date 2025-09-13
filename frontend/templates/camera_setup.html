@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="setup-container">
+    <h1>Add Camera</h1>
+    
+    <div class="setup-tabs">
+        <button class="tab-btn active" onclick="openTab('auto-tab')">Auto Setup</button>
+        <button class="tab-btn" onclick="openTab('manual-tab')">Manual Setup</button>
+        <button class="tab-btn" onclick="openTab('discover-tab')">Discover Cameras</button>
+    </div>
+
+    <!-- Auto Setup Tab -->
+    <div id="auto-tab" class="tab-content active">
+        <form id="auto-setup-form" class="setup-form">
+            <div class="form-group">
+                <label>Camera Name</label>
+                <input type="text" name="name" placeholder="Front Door Camera" required>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>IP Address</label>
+                    <input type="text" name="ip" placeholder="192.168.1.100" required>
+                </div>
+                <div class="form-group">
+                    <label>RTSP Port</label>
+                    <input type="number" name="rtsp_port" value="554" required>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" placeholder="admin" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" placeholder="Password" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Transport Protocol</label>
+                <select name="transport">
+                    <option value="tcp">TCP</option>
+                    <option value="udp">UDP</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Camera Brand</label>
+                <select name="brand">
+                    <option value="">Select Brand</option>
+                    <option value="hanwha">Hanwha/Samsung</option>
+                    <option value="hikvision">Hikvision</option>
+                    <option value="dahua">Dahua</option>
+                    <option value="axis">Axis</option>
+                    <option value="generic">Generic/Other</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn-primary">Add Camera</button>
+        </form>
+    </div>
+
+    <!-- Manual Setup Tab -->
+    <div id="manual-tab" class="tab-content">
+        <form id="manual-setup-form" class="setup-form">
+            <div class="form-group">
+                <label>Camera Name</label>
+                <input type="text" name="name" placeholder="Custom Camera" required>
+            </div>
+
+            <div class="form-group">
+                <label>RTSP URL</label>
+                <input type="text" name="rtsp_url" placeholder="rtsp://username:password@ip:port/stream" required>
+                <small class="form-help">Full RTSP URL including credentials</small>
+            </div>
+
+            <div class="form-group">
+                <label>Transport Protocol</label>
+                <select name="transport">
+                    <option value="tcp">TCP</option>
+                    <option value="udp">UDP</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn-primary">Add Camera</button>
+        </form>
+    </div>
+
+    <!-- Discover Tab -->
+    <div id="discover-tab" class="tab-content">
+        <div class="discover-section">
+            <h3>Discover ONVIF Cameras</h3>
+            <p>Scan your network for ONVIF-compatible cameras</p>
+            
+            <button onclick="discoverCameras()" class="btn-primary" id="discover-btn">
+                Start Discovery
+            </button>
+
+            <div id="discovery-results" class="discovery-results" style="display: none;">
+                <h4>Discovered Cameras</h4>
+                <div id="discovered-cameras-list" class="cameras-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openTab(tabId) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabId).classList.add('active');
+    
+    // Update active tab button
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.currentTarget.classList.add('active');
+}
+
+// Form submission handlers
+document.getElementById('auto-setup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        const response = await fetch('/api/cameras', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            alert('Camera added successfully!');
+            window.location.href = '/';
+        } else {
+            alert('Error adding camera');
+        }
+    } catch (error) {
+        alert('Error adding camera: ' + error.message);
+    }
+});
+
+document.getElementById('manual-setup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        const response = await fetch('/api/cameras', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...data,
+                manual_setup: true
+            })
+        });
+        
+        if (response.ok) {
+            alert('Camera added successfully!');
+            window.location.href = '/';
+        } else {
+            alert('Error adding camera');
+        }
+    } catch (error) {
+        alert('Error adding camera: ' + error.message);
+    }
+});
+
+async function discoverCameras() {
+    const btn = document.getElementById('discover-btn');
+    btn.disabled = true;
+    btn.textContent = 'Discovering...';
+    
+    try {
+        const response = await fetch('/api/discover', { method: 'POST' });
+        const cameras = await response.json();
+        
+        const resultsDiv = document.getElementById('discovery-results');
+        const listDiv = document.getElementById('discovered-cameras-list');
+        
+        listDiv.innerHTML = '';
+        
+        if (cameras.length === 0) {
+            listDiv.innerHTML = '<p>No cameras found</p>';
+        } else {
+            cameras.forEach(cam => {
+                listDiv.innerHTML += `
+                    <div class="discovered-camera">
+                        <strong>${cam.ip}</strong> - ${cam.name || 'Unknown'}
+                        <button onclick="addDiscoveredCamera('${cam.ip}')">Add</button>
+                    </div>
+                `;
+            });
+        }
+        
+        resultsDiv.style.display = 'block';
+    } catch (error) {
+        alert('Discovery failed: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Start Discovery';
+    }
+}
+
+function addDiscoveredCamera(ip) {
+    document.querySelector('[name="ip"]').value = ip;
+    openTab('auto-tab');
+}
+</script>
+
+<style>
+.setup-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ddd;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-btn.active {
+    border-bottom-color: #3498db;
+    color: #3498db;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.setup-form {
+    max-width: 600px;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+.form-help {
+    color: #666;
+    font-size: 12px;
+}
+
+.discovery-results {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.discovered-camera {
+    padding: 10px;
+    margin: 5px 0;
+    background: white;
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+</style>
+{% endblock %}

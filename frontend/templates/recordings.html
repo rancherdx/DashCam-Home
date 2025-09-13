@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="recordings-container">
+    <h1>Recordings & Snapshots</h1>
+    
+    <div class="filters">
+        <select id="camera-filter">
+            <option value="">All Cameras</option>
+            {% for camera in cameras %}
+            <option value="{{ camera.id }}">{{ camera.name }}</option>
+            {% endfor %}
+        </select>
+        
+        <select id="type-filter">
+            <option value="all">All Types</option>
+            <option value="video">Videos</option>
+            <option value="snapshot">Snapshots</option>
+        </select>
+        
+        <select id="time-filter">
+            <option value="1">Last 1 hour</option>
+            <option value="3">Last 3 hours</option>
+            <option value="7" selected>Last 7 hours</option>
+            <option value="24">Last 24 hours</option>
+        </select>
+    </div>
+
+    <div class="recordings-grid" id="recordings-grid">
+        <div class="loading">Loading recordings...</div>
+    </div>
+</div>
+
+<script>
+let currentRecordings = [];
+
+async function loadRecordings() {
+    const cameraId = document.getElementById('camera-filter').value;
+    const hours = document.getElementById('time-filter').value;
+    
+    try {
+        const response = await fetch(`/api/recordings?camera_id=${cameraId}&hours=${hours}`);
+        const recordings = await response.json();
+        currentRecordings = recordings;
+        displayRecordings(recordings);
+    } catch (error) {
+        console.error('Error loading recordings:', error);
+    }
+}
+
+function displayRecordings(recordings) {
+    const grid = document.getElementById('recordings-grid');
+    
+    if (recordings.length === 0) {
+        grid.innerHTML = '<div class="empty-state">No recordings found</div>';
+        return;
+    }
+
+    grid.innerHTML = recordings.map(recording => `
+        <div class="recording-card" data-type="${recording.type}">
+            <div class="recording-thumbnail">
+                ${recording.type === 'video' ? 
+                    `<video src="/clips/${recording.filename}" preload="metadata"></video>` :
+                    `<img src="/snapshots/${recording.filename}" alt="Snapshot">`
+                }
+            </div>
+            <div class="recording-info">
+                <h4>${recording.camera_name || 'Unknown Camera'}</h4>
+                <p>${new Date(recording.created).toLocaleString()}</p>
+                <p>${formatFileSize(recording.size)}</p>
+            </div>
+            <div class="recording-actions">
+                <button onclick="downloadRecording('${recording.filename}', '${recording.type}')">
+                    Download
+                </button>
+                <button onclick="deleteRecording('${recording.filename}', '${recording.type}')" class="btn-danger">
+                    Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function downloadRecording(filename, type) {
+    const path = type === 'video' ? '/clips/' : '/snapshots/';
+    window.open(path + filename, '_blank');
+}
+
+async function deleteRecording(filename, type) {
+    if (!confirm('Are you sure you want to delete this recording?')) return;
+    
+    try {
+        const response = await fetch(`/api/recordings/${filename}?type=${type}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            loadRecordings();
+        } else {
+            alert('Error deleting recording');
+        }
+    } catch (error) {
+        alert('Error deleting recording: ' + error.message);
+    }
+}
+
+// Filter recordings based on selections
+function applyFilters() {
+    const typeFilter = document.getElementById('type-filter').value;
+    const filtered = currentRecordings.filter(rec => 
+        typeFilter === 'all' || rec.type === typeFilter
+    );
+    displayRecordings(filtered);
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadRecordings();
+    
+    // Add event listeners to filters
+    document.getElementById('camera-filter').addEventListener('change', loadRecordings);
+    document.getElementById('type-filter').addEventListener('change', applyFilters);
+    document.getElementById('time-filter').addEventListener('change', loadRecordings);
+});
+</script>
+
+<style>
+.recordings-container {
+    padding: 20px;
+}
+
+.filters {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.filters select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.recordings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.recording-card {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.recording-thumbnail {
+    height: 200px;
+    overflow: hidden;
+}
+
+.recording-thumbnail video,
+.recording-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.recording-info {
+    padding: 15px;
+}
+
+.recording-info h4 {
+    margin: 0 0 8px 0;
+    color: #333;
+}
+
+.recording-info p {
+    margin: 4px 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.recording-actions {
+    padding: 15px;
+    display: flex;
+    gap: 10px;
+    border-top: 1px solid #eee;
+}
+
+.recording-actions button {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+}
+
+.loading, .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    grid-column: 1 / -1;
+}
+</style>
+{% endblock %}

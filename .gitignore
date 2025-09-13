@@ -1,0 +1,53 @@
+# Create .gitignore file
+@"
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Storage (you might want to keep this if not too large)
+storage/
+!storage/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cloudflare
+cloudflared/
+cloudflare-config.yml
+
+# FFmpeg temporary files
+*.ts
+*.m3u8
+"@ | Out-File -Encoding UTF8 .gitignore
+
+# Add .gitignore to repository
+git add .gitignore
+git commit -m "Add .gitignore file"

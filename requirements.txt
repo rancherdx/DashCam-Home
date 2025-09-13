@@ -1,0 +1,6 @@
+flask==2.3.3
+onvif-zeep==0.2.12
+requests==2.31.0
+wsdiscovery==2.0.0
+opencv-python==4.8.1.78
+python-dotenv==1.0.0

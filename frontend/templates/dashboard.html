@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>Camera Dashboard</h1>
+    <button id="refresh-btn" class="btn-primary">Refresh</button>
+</div>
+
+<div class="camera-grid">
+    {% if cameras %}
+        {% for camera in cameras %}
+        <div class="camera-card" data-camera-id="{{ camera.id }}">
+            <div class="camera-header">
+                <h3>{{ camera.name }}</h3>
+                <span class="status-indicator {{ 'online' if camera.status == 'connected' else 'offline' }}"></span>
+            </div>
+            
+            <div class="camera-feed">
+                <video controls playsinline>
+                    <source src="/streams/{{ camera.id }}/index.m3u8" type="application/vnd.apple.mpegurl">
+                </video>
+            </div>
+            
+            <div class="camera-controls">
+                <button class="btn-small" onclick="takeSnapshot('{{ camera.id }}')">Snapshot</button>
+                <button class="btn-small" onclick="startRecording('{{ camera.id }}')">Record</button>
+                <a href="{{ url_for('onvif_control', camera_id=camera.id) }}" class="btn-small">PTZ Control</a>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <h2>No cameras configured</h2>
+            <p>Add your first camera to get started</p>
+            <a href="{{ url_for('camera_setup') }}" class="btn-primary">Add Camera</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

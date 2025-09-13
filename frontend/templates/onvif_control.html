@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="onvif-container">
+    <h1>ONVIF Camera Control - {{ camera_id }}</h1>
+    
+    <div class="onvif-status" id="onvif-status">
+        <div class="status-loading">Connecting to camera...</div>
+    </div>
+
+    <div class="onvif-controls" id="onvif-controls" style="display: none;">
+        <!-- PTZ Controls -->
+        <div class="control-section">
+            <h3>PTZ Controls</h3>
+            <div class="ptz-controls">
+                <div class="ptz-grid">
+                    <button class="ptz-btn" onclick="ptzControl('up')">↑</button>
+                    <button class="ptz-btn" onclick="ptzControl('left')">←</button>
+                    <button class="ptz-btn" onclick="ptzControl('home')">⌂</button>
+                    <button class="ptz-btn" onclick="ptzControl('right')">→</button>
+                    <button class="ptz-btn" onclick="ptzControl('down')">↓</button>
+                </div>
+                
+                <div class="zoom-controls">
+                    <button onclick="ptzControl('zoom_in')">Zoom In</button>
+                    <button onclick="ptzControl('zoom_out')">Zoom Out</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preset Positions -->
+        <div class="control-section">
+            <h3>Preset Positions</h3>
+            <div class="presets-grid" id="presets-list">
+                <div class="loading">Loading presets...</div>
+            </div>
+        </div>
+
+        <!-- Stream Profiles -->
+        <div class="control-section">
+            <h3>Stream Profiles</h3>
+            <div class="profiles-list" id="profiles-list">
+                <div class="loading">Loading profiles...</div>
+            </div>
+        </div>
+
+        <!-- Camera Settings -->
+        <div class="control-section">
+            <h3>Camera Settings</h3>
+            <div class="camera-settings">
+                <div class="setting-item">
+                    <label>IR Cut Filter</label>
+                    <select id="ir-cut-filter" onchange="updateSetting('ir_cut', this.value)">
+                        <option value="auto">Auto</option>
+                        <option value="on">On</option>
+                        <option value="off">Off</option>
+                    </select>
+                </div>
+                
+                <div class="setting-item">
+                    <label>Image Rotation</label>
+                    <select id="image-rotation" onchange="updateSetting('rotation', this.value)">
+                        <option value="0">0°</option>
+                        <option value="90">90°</option>
+                        <option value="180">180°</option>
+                        <option value="270">270°</option>
+                    </select>
+                </div>
+                
+                <div class="setting-item">
+                    <label>WDR</label>
+                    <input type="range" id="wdr-level" min="0" max="100" onchange="updateSetting('wdr', this.value)">
+                    <span id="wdr-value">50%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="onvif-error" id="onvif-error" style="display: none;">
+        <h3>Connection Error</h3>
+        <p id="error-message"></p>
+        <button onclick="retryConnection()" class="btn-primary">Retry Connection</button>
+    </div>
+</div>
+
+<script>
+const cameraId = '{{ camera_id }}';
+
+async function connectToCamera() {
+    try {
+        const response = await fetch(`/api/onvif/connect/${cameraId}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('onvif-status').style.display = 'none';
+            document.getElementById('onvif-controls').style.display = 'block';
+            loadPresets();
+            loadProfiles();
+            loadSettings();
+        } else {
+            showError(result.message || 'Failed to connect to camera');
+        }
+    } catch (error) {
+        showError('Connection error: ' + error.message);
+    }
+}
+
+async function ptzControl(command) {
+    try {
+        const response = await fetch(`/api/onvif/ptz/${cameraId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command })
+        });
+        
+        if (!response.ok) {
+            alert('PTZ control failed');
+        }
+    } catch (error) {
+        alert('PTZ error: ' + error.message);
+    }
+}
+
+async function loadPresets() {
+    try {
+        const response = await fetch(`/api/onvif/presets/${cameraId}`);
+        const presets = await response.json();
+        
+        const presetsList = document.getElementById('presets-list');
+        presetsList.innerHTML = presets.map(preset => `
+            <div class="preset-item">
+                <span>${preset.name}</span>
+                <button onclick="gotoPreset('${preset.token}')">Go To</button>
+                <button onclick="setPreset('${preset.token}')">Set</button>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading presets:', error);
+    }
+}
+
+async function loadProfiles() {
+    try {
+        const response = await fetch(`/api/onvif/profiles/${cameraId}`);
+        const profiles = await response.json();
+        
+        const profilesList = document.getElementById('profiles-list');
+        profilesList.innerHTML = profiles.map(profile => `
+            <div class="profile-item">
+                <h4>${profile.name}</h4>
+                <p>${profile.width}x${profile.height} - ${profile.codec}</p>
+                <button onclick="switchProfile('${profile.token}')">Switch</button>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading profiles:', error);
+    }
+}
+
+async function loadSettings() {
+    try {
+        const response = await fetch(`/api/onvif/settings/${cameraId}`);
+        const settings = await response.json();
+        
+        // Update UI with current settings
+        if (settings.ir_cut) {
+            document.getElementById('ir-cut-filter').value = settings.ir_cut;
+        }
+        if (settings.rotation) {
+            document.getElementById('image-rotation').value = settings.rotation;
+        }
+        if (settings.wdr) {
+            document.getElementById('wdr-level').value = settings.wdr;
+            document.getElementById('wdr-value').textContent = settings.wdr + '%';
+        }
+    } catch (error) {
+        console.error('Error loading settings:', error);
+    }
+}
+
+async function updateSetting(setting, value) {
+    try {
+        await fetch(`/api/onvif/settings/${cameraId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [setting]: value })
+        });
+    } catch (error) {
+        alert('Error updating setting: ' + error.message);
+    }
+}
+
+function showError(message) {
+    document.getElementById('onvif-status').style.display = 'none';
+    document.getElementById('onvif-controls').style.display = 'none';
+    document.getElementById('onvif-error').style.display = 'block';
+    document.getElementById('error-message').textContent = message;
+}
+
+function retryConnection() {
+    document.getElementById('onvif-error').style.display = 'none';
+    document.getElementById('onvif-status').style.display = 'block';
+    connectToCamera();
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', connectToCamera);
+</script>
+
+<style>
+.onvif-container {
+    padding: 20px;
+    max-width: 1000px;
+}
+
+.onvif-status, .onvif-error {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.control-section {
+    background: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.ptz-controls {
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ptz-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 60px);
+    grid-template-rows: repeat(3, 60px);
+    gap: 5px;
+}
+
+.ptz-btn {
+    width: 60px;
+    height: 60px;
+    border: none;
+    border-radius: 8px;
+    background: #3498db;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.ptz-btn:hover {
+    background: #2980b9;
+}
+
+.zoom-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.zoom-controls button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    background: #2ecc71;
+    color: white;
+    cursor: pointer;
+}
+
+.zoom-controls button:hover {
+    background: #27ae60;
+}
+
+.presets-grid, .profiles-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.preset-item, .profile-item {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.preset-item button, .profile-item button {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 3px;
+    background: #3498db;
+    color: white;
+    cursor: pointer;
+}
+
+.camera-settings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.setting-item label {
+    font-weight: 500;
+    color: #333;
+}
+
+.setting-item input[type="range"] {
+    width: 100%;
+}
+</style>
+{% endblock %}

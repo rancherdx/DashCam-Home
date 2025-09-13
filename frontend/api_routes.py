@@ -1,0 +1,200 @@
+from flask import Blueprint, request, jsonify, send_file, abort, current_app
+import logging
+from pathlib import Path
+from functools import wraps
+from datetime import datetime, timedelta
+import secrets
+
+logger = logging.getLogger(__name__)
+
+def token_required(f):
+    """Decorator to require authentication token for API endpoints"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Skip authentication in development if disabled
+        if current_app.config.get('ENV') == 'development' and current_app.config.get('DISABLE_AUTH'):
+            return f(*args, **kwargs)
+            
+        token = request.headers.get('X-Auth-Token') or request.args.get('token')
+        if not token or token != current_app.config.get('API_TOKEN'):
+            logger.warning(f"Unauthorized access attempt with token: {token}")
+            abort(401)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def stream_token_required(f):
+    """Decorator for stream token authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        camera_id = kwargs.get('camera_id')
+        token = request.args.get('token')
+        
+        if not token or not stream_processor.verify_stream_token(camera_id, token):
+            logger.warning(f"Invalid stream token for camera {camera_id}")
+            abort(401)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def create_api_routes(camera_manager, stream_processor, onvif_controller, recording_manager):
+    api_bp = Blueprint('api', __name__)
+    
+    # Store reference to components
+    api_bp.camera_manager = camera_manager
+    api_bp.stream_processor = stream_processor
+    api_bp.onvif_controller = onvif_controller
+    api_bp.recording_manager = recording_manager
+    
+    @api_bp.route('/api/auth/login', methods=['POST'])
+    def login():
+        """Login endpoint to get API token"""
+        data = request.json
+        # In a real application, you'd validate credentials here
+        # For simplicity, we're using a single API token
+        return jsonify({
+            'token': current_app.config.get('API_TOKEN'),
+            'expires': (datetime.now() + timedelta(hours=24)).isoformat()
+        })
+    
+    @api_bp.route('/api/stream/auth/<camera_id>')
+    @token_required
+    def get_stream_auth(camera_id):
+        """Get a temporary token to access a stream"""
+        token = stream_processor.generate_stream_token(camera_id)
+        expiry = datetime.now() + current_app.config.get('TOKEN_EXPIRY', timedelta(hours=1))
+        return jsonify({
+            'token': token, 
+            'camera_id': camera_id,
+            'expires': expiry.isoformat()
+        })
+    
+    @api_bp.route('/streams/<camera_id>/<path:filename>')
+    @stream_token_required
+    def serve_stream_file(camera_id, filename):
+        """Serve HLS stream files with token verification"""
+        try:
+            stream_path = Path(current_app.config['HLS_OUTPUT_DIR']) / camera_id
+            if not stream_path.exists():
+                abort(404)
+            return send_from_directory(stream_path, filename)
+        except Exception as e:
+            logger.error(f"Error serving stream file: {e}")
+            abort(404)
+    
+    # Camera management endpoints
+    @api_bp.route('/api/cameras', methods=['GET'])
+    @token_required
+    def get_cameras():
+        return jsonify(camera_manager.get_all_cameras())
+    
+    @api_bp.route('/api/cameras', methods=['POST'])
+    @token_required
+    def add_camera():
+        data = request.json
+        camera_id = camera_manager.add_camera(data)
+        return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'})
+    
+    @api_bp.route('/api/cameras/<camera_id>', methods=['DELETE'])
+    @token_required
+    def remove_camera(camera_id):
+        success = camera_manager.remove_camera(camera_id)
+        return jsonify({'success': success, 'message': 'Camera removed' if success else 'Camera not found'})
+    
+    # Stream control endpoints
+    @api_bp.route('/api/stream/start/<camera_id>', methods=['POST'])
+    @token_required
+    def start_stream(camera_id):
+        data = request.json or {}
+        profile = data.get('profile', 'main')
+        success = camera_manager.start_stream(camera_id, profile)
+        return jsonify({'success': success, 'message': 'Stream started' if success else 'Stream start failed'})
+    
+    @api_bp.route('/api/stream/stop/<camera_id>', methods=['POST'])
+    @token_required
+    def stop_stream(camera_id):
+        success = camera_manager.stop_stream(camera_id)
+        return jsonify({'success': success, 'message': 'Stream stopped' if success else 'Stream stop failed'})
+    
+    @api_bp.route('/api/stream/restart/<camera_id>', methods=['POST'])
+    @token_required
+    def restart_stream(camera_id):
+        camera_manager.stop_stream(camera_id)
+        success = camera_manager.start_stream(camera_id)
+        return jsonify({'success': success, 'message': 'Stream restarted' if success else 'Stream restart failed'})
+    
+    # ONVIF endpoints
+    @api_bp.route('/api/onvif/connect/<camera_id>', methods=['POST'])
+    @token_required
+    def connect_onvif(camera_id):
+        camera = camera_manager.get_camera_status(camera_id)
+        if not camera:
+            abort(404)
+        
+        success = onvif_controller.connect_camera(
+            camera_id, 
+            camera['ip'], 
+            camera.get('onvif_port', 80),
+            camera['username'], 
+            camera['password']
+        )
+        return jsonify({'success': success})
+    
+    @api_bp.route('/api/onvif/profiles/<camera_id>', methods=['GET'])
+    @token_required
+    def get_onvif_profiles(camera_id):
+        profiles = onvif_controller.get_profiles(camera_id)
+        return jsonify(profiles)
+    
+    @api_bp.route('/api/onvif/ptz/<camera_id>', methods=['POST'])
+    @token_required
+    def ptz_control(camera_id):
+        data = request.json
+        command = data.get('command')
+        # Implement PTZ control logic here
+        return jsonify({'success': True, 'command': command})
+    
+    # Recording endpoints
+    @api_bp.route('/api/recordings', methods=['GET'])
+    @token_required
+    def get_recordings():
+        camera_id = request.args.get('camera_id')
+        hours = int(request.args.get('hours', 7))
+        recordings = recording_manager.get_recordings(camera_id, hours)
+        return jsonify(recordings)
+    
+    @api_bp.route('/api/snapshot/<camera_id>', methods=['POST'])
+    @token_required
+    def take_snapshot(camera_id):
+        # Implementation for taking snapshot
+        filename = recording_manager.take_snapshot(camera_id, b'')  # Empty bytes for demo
+        return jsonify({'success': bool(filename), 'filename': filename})
+    
+    @api_bp.route('/api/recording/start/<camera_id>', methods=['POST'])
+    @token_required
+    def start_recording(camera_id):
+        filename = recording_manager.start_recording(camera_id)
+        return jsonify({'success': bool(filename), 'filename': filename})
+    
+    @api_bp.route('/api/recording/stop/<camera_id>', methods=['POST'])
+    @token_required
+    def stop_recording(camera_id):
+        # Implementation to stop recording
+        return jsonify({'success': True, 'message': 'Recording stopped'})
+    
+    # System endpoints
+    @api_bp.route('/api/system/status', methods=['GET'])
+    @token_required
+    def system_status():
+        return jsonify({
+            'status': 'running',
+            'timestamp': datetime.now().isoformat(),
+            'cameras_count': len(camera_manager.get_all_cameras()),
+            'active_streams': len([c for c in camera_manager.get_all_cameras() if c.get('stream_active')])
+        })
+    
+    @api_bp.route('/api/system/restart', methods=['POST'])
+    @token_required
+    def system_restart():
+        # Implementation to restart services
+        return jsonify({'success': True, 'message': 'Restart initiated'})
+    
+    return api_bp

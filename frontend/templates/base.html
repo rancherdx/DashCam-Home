@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Camera Dashboard</h2>
+        <nav>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">Dashboard</a>
+            <a href="{{ url_for('camera_setup') }}" class="nav-item">Add Camera</a>
+            <a href="{{ url_for('recordings') }}" class="nav-item">Recordings</a>
+            <a href="{{ url_for('settings') }}" class="nav-item">Settings</a>
+        </nav>
+    </div>
+    
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
