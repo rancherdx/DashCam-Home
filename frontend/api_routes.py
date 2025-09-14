@@ -48,7 +48,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             return f(*args, **kwargs)
         return decorated_function
 
-    @api_bp.route('/api/auth/login', methods=['POST'])
+    @api_bp.route('/auth/login', methods=['POST'])
     def login():
         """Login endpoint to get API token"""
         data = request.json
@@ -59,7 +59,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             'expires': (datetime.now() + timedelta(hours=24)).isoformat()
         })
     
-    @api_bp.route('/api/stream/auth/<camera_id>')
+    @api_bp.route('/stream/auth/<camera_id>')
     @token_required
     def get_stream_auth(camera_id):
         """Get a temporary token to access a stream"""
@@ -85,19 +85,19 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             abort(404)
     
     # Camera management endpoints
-    @api_bp.route('/api/cameras', methods=['GET'])
+    @api_bp.route('/cameras', methods=['GET'])
     @token_required
     def get_cameras():
         return jsonify(camera_manager.get_all_cameras())
     
-    @api_bp.route('/api/cameras', methods=['POST'])
+    @api_bp.route('/cameras', methods=['POST'])
     @token_required
     def add_camera():
         data = request.json
         camera_id = camera_manager.add_camera(data)
         return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'})
     
-    @api_bp.route('/api/cameras/<camera_id>', methods=['GET'])
+    @api_bp.route('/cameras/<camera_id>', methods=['GET'])
     @token_required
     def get_camera(camera_id):
         camera = camera_manager.get_camera_status(camera_id)
@@ -105,7 +105,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             abort(404, description="Camera not found")
         return jsonify(camera)
 
-    @api_bp.route('/api/cameras/<camera_id>', methods=['PUT'])
+    @api_bp.route('/cameras/<camera_id>', methods=['PUT'])
     @token_required
     def update_camera(camera_id):
         data = request.json
@@ -117,14 +117,14 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             abort(404, description="Camera not found or update failed")
         return jsonify({'success': success, 'message': 'Camera updated successfully'})
 
-    @api_bp.route('/api/cameras/<camera_id>', methods=['DELETE'])
+    @api_bp.route('/cameras/<camera_id>', methods=['DELETE'])
     @token_required
     def remove_camera(camera_id):
         success = camera_manager.remove_camera(camera_id)
         return jsonify({'success': success, 'message': 'Camera removed' if success else 'Camera not found'})
     
     # Stream control endpoints
-    @api_bp.route('/api/stream/start/<camera_id>', methods=['POST'])
+    @api_bp.route('/stream/start/<camera_id>', methods=['POST'])
     @token_required
     def start_stream(camera_id):
         data = request.json or {}
@@ -132,13 +132,13 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         success = camera_manager.start_stream(camera_id, profile)
         return jsonify({'success': success, 'message': 'Stream started' if success else 'Stream start failed'})
     
-    @api_bp.route('/api/stream/stop/<camera_id>', methods=['POST'])
+    @api_bp.route('/stream/stop/<camera_id>', methods=['POST'])
     @token_required
     def stop_stream(camera_id):
         success = camera_manager.stop_stream(camera_id)
         return jsonify({'success': success, 'message': 'Stream stopped' if success else 'Stream stop failed'})
     
-    @api_bp.route('/api/stream/restart/<camera_id>', methods=['POST'])
+    @api_bp.route('/stream/restart/<camera_id>', methods=['POST'])
     @token_required
     def restart_stream(camera_id):
         camera_manager.stop_stream(camera_id)
@@ -146,7 +146,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         return jsonify({'success': success, 'message': 'Stream restarted' if success else 'Stream restart failed'})
     
     # ONVIF endpoints
-    @api_bp.route('/api/onvif/connect/<camera_id>', methods=['POST'])
+    @api_bp.route('/onvif/connect/<camera_id>', methods=['POST'])
     @token_required
     def connect_onvif(camera_id):
         camera = camera_manager.get_camera_status(camera_id)
@@ -162,13 +162,13 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         )
         return jsonify({'success': success})
     
-    @api_bp.route('/api/onvif/profiles/<camera_id>', methods=['GET'])
+    @api_bp.route('/onvif/profiles/<camera_id>', methods=['GET'])
     @token_required
     def get_onvif_profiles(camera_id):
         profiles = onvif_controller.get_profiles(camera_id)
         return jsonify(profiles)
     
-    @api_bp.route('/api/onvif/ptz/<camera_id>', methods=['POST'])
+    @api_bp.route('/onvif/ptz/<camera_id>', methods=['POST'])
     @token_required
     def ptz_control(camera_id):
         data = request.json
@@ -176,14 +176,14 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         # Implement PTZ control logic here
         return jsonify({'success': True, 'command': command})
     
-    @api_bp.route('/api/onvif/motion_rules/<camera_id>/<profile_token>', methods=['GET'])
+    @api_bp.route('/onvif/motion_rules/<camera_id>/<profile_token>', methods=['GET'])
     @token_required
     def get_motion_rules(camera_id, profile_token):
         rules = onvif_controller.get_motion_detection_rules(camera_id, profile_token)
         return jsonify(rules)
 
     # Recording endpoints
-    @api_bp.route('/api/recordings', methods=['GET'])
+    @api_bp.route('/recordings', methods=['GET'])
     @token_required
     def get_recordings():
         camera_id = request.args.get('camera_id')
@@ -191,27 +191,27 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         recordings = recording_manager.get_recordings(camera_id, hours)
         return jsonify(recordings)
     
-    @api_bp.route('/api/snapshot/<camera_id>', methods=['POST'])
+    @api_bp.route('/snapshot/<camera_id>', methods=['POST'])
     @token_required
     def take_snapshot(camera_id):
         # Implementation for taking snapshot
         filename = recording_manager.take_snapshot(camera_id, b'')  # Empty bytes for demo
         return jsonify({'success': bool(filename), 'filename': filename})
     
-    @api_bp.route('/api/recording/start/<camera_id>', methods=['POST'])
+    @api_bp.route('/recording/start/<camera_id>', methods=['POST'])
     @token_required
     def start_recording(camera_id):
         filename = recording_manager.start_recording(camera_id)
         return jsonify({'success': bool(filename), 'filename': filename})
     
-    @api_bp.route('/api/recording/stop/<camera_id>', methods=['POST'])
+    @api_bp.route('/recording/stop/<camera_id>', methods=['POST'])
     @token_required
     def stop_recording(camera_id):
         # Implementation to stop recording
         return jsonify({'success': True, 'message': 'Recording stopped'})
     
     # System endpoints
-    @api_bp.route('/api/system/status', methods=['GET'])
+    @api_bp.route('/system/status', methods=['GET'])
     @token_required
     def system_status():
         return jsonify({
@@ -221,7 +221,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             'active_streams': len([c for c in camera_manager.get_all_cameras() if c.get('stream_active')])
         })
     
-    @api_bp.route('/api/system/stats', methods=['GET'])
+    @api_bp.route('/system/stats', methods=['GET'])
     @token_required
     def system_stats():
         """Returns system statistics like CPU, memory, and network usage."""
@@ -244,7 +244,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         }
         return jsonify(stats)
 
-    @api_bp.route('/api/system/restart', methods=['POST'])
+    @api_bp.route('/system/restart', methods=['POST'])
     @token_required
     def system_restart():
         # This is complex to implement safely. For now, we'll just log it.
@@ -252,12 +252,12 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         return jsonify({'success': True, 'message': 'Restart initiated (logging only)'})
 
     # Settings Endpoints
-    @api_bp.route('/api/settings', methods=['GET'])
+    @api_bp.route('/settings', methods=['GET'])
     @token_required
     def get_settings():
         return jsonify(settings_manager.get_all_settings())
 
-    @api_bp.route('/api/settings', methods=['POST'])
+    @api_bp.route('/settings', methods=['POST'])
     @token_required
     def update_settings():
         new_settings = request.json
@@ -268,7 +268,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         settings_manager.update_settings(new_settings)
         return jsonify({'success': True, 'message': 'Settings updated successfully'})
 
-    @api_bp.route('/api/settings/export', methods=['GET'])
+    @api_bp.route('/settings/export', methods=['GET'])
     @token_required
     def export_settings():
         """Exports the current settings as a JSON file."""
@@ -277,7 +277,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             'Content-Disposition': 'attachment; filename=camera_dashboard_config.json'
         }
 
-    @api_bp.route('/api/system/logs', methods=['GET'])
+    @api_bp.route('/system/logs', methods=['GET'])
     @token_required
     def list_logs():
         """Lists available log files."""
@@ -289,7 +289,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    @api_bp.route('/api/system/logs/<filename>', methods=['GET'])
+    @api_bp.route('/system/logs/<filename>', methods=['GET'])
     @token_required
     def get_log_file(filename):
         """Returns the content of a specific log file."""
