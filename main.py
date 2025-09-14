@@ -18,7 +18,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='frontend/templates', static_folder='frontend/static')
 
     # Initialize settings manager first
     app.settings_manager = SettingsManager()

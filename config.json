@@ -1,17 +1,4 @@
 {
-    "general": {
-        "dashboard_name": "Camera Dashboard",
-        "default_stream_quality": "medium",
-        "auto_start_streams": true
-    },
-    "storage": {
-        "retention_period_hours": 7,
-        "auto_cleanup": true
-    },
-    "cloudflare": {
-        "domain": "dashcam.designspek.co",
-        "enable_https": true,
-        "access_protection": "token"
-    },
+    "setup_complete": false,
     "cameras": []
 }
