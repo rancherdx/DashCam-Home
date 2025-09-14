@@ -82,6 +82,27 @@ class CameraManager:
         logger.warning(f"Attempted to remove non-existent camera ID: {camera_id}")
         return False
 
+    def update_camera(self, camera_id: str, camera_config: dict) -> bool:
+        """Updates an existing camera's configuration."""
+        if camera_id not in self.cameras:
+            logger.warning(f"Attempted to update non-existent camera ID: {camera_id}")
+            return False
+
+        # Do not allow changing the ID
+        if 'id' in camera_config:
+            del camera_config['id']
+
+        if self.settings_manager.update_camera_config(camera_id, camera_config):
+            # Update runtime config
+            self.cameras[camera_id].update(camera_config)
+            logger.info(f"Successfully updated camera: {self.cameras[camera_id].get('name')}")
+            # Potentially restart stream or reconnect ONVIF if relevant settings changed
+            # For now, we'll keep it simple. A restart might be needed.
+            return True
+        else:
+            logger.error(f"Failed to save updated camera to config: {self.cameras[camera_id].get('name')}")
+            return False
+
     def get_camera_status(self, camera_id: str) -> dict:
         """Gets the full status of a single camera."""
         if camera_id in self.cameras:

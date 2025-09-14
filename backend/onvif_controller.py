@@ -91,3 +91,33 @@ class ONVIFController:
         except Exception as e:
             logger.error(f"PTZ control failed for camera {camera_id}: {e}")
             return False
+
+    def get_motion_detection_rules(self, camera_id: str, profile_token: str) -> List[dict]:
+        """Gets motion detection rules for a specific profile."""
+        if camera_id not in self.clients:
+            return []
+
+        try:
+            analytics_service = self.clients[camera_id].create_analytics_service()
+            rules = analytics_service.GetRules({'ConfigurationToken': profile_token})
+
+            motion_rules = []
+            for rule in rules:
+                if 'Motion' in rule.Type:
+                    # This is a simplified representation. The actual structure can be complex.
+                    motion_rules.append({
+                        'name': rule.Name,
+                        'type': rule.Type,
+                        'parameters': str(rule.Parameters) # Convert to string for simplicity
+                    })
+            return motion_rules
+        except Exception as e:
+            logger.error(f"Failed to get motion detection rules for camera {camera_id}: {e}")
+            return []
+
+    def disconnect_camera(self, camera_id: str):
+        if camera_id in self.clients:
+            # The onvif-zeep library doesn't have an explicit disconnect method,
+            # so we just remove the client from our dictionary.
+            del self.clients[camera_id]
+            logger.info(f"Disconnected ONVIF client for camera {camera_id}")

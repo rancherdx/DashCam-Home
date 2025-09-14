@@ -91,6 +91,25 @@ class SettingsManager:
             logger.info(f"Removed camera config with ID: {camera_id}")
         return removed
 
+    def update_camera_config(self, camera_id: str, new_config: Dict) -> bool:
+        """Updates an existing camera's configuration."""
+        with self._lock:
+            camera_found = False
+            for i, cam in enumerate(self.settings['cameras']):
+                if cam.get('id') == camera_id:
+                    # Update the existing config with new values
+                    self.settings['cameras'][i].update(new_config)
+                    camera_found = True
+                    break
+
+        if camera_found:
+            self._save_settings()
+            logger.info(f"Updated camera config for ID: {camera_id}")
+            return True
+        else:
+            logger.warning(f"Could not find camera with ID {camera_id} to update.")
+            return False
+
     def get_setting(self, key_path: str, default=None):
         """
         Retrieves a nested setting using a dot-separated key path.
