@@ -1,7 +1,10 @@
-from flask import Flask, jsonify, render_template, send_from_directory, current_app, request
+from flask import (Flask, jsonify, render_template, send_from_directory,
+                   current_app, request, session, redirect, url_for, flash)
 import logging
 import os
 import subprocess
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from backend.camera_manager import CameraManager
 from backend.stream_processor import StreamProcessor
@@ -68,6 +71,67 @@ def create_app():
     )
     app.register_blueprint(api_blueprint, url_prefix='/api')
 
+    # --- Authentication and Setup Logic ---
+
+    def login_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not app.settings_manager.get_setting('setup_complete'):
+                return redirect(url_for('setup'))
+            if 'logged_in' not in session:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+
+    @app.route('/setup', methods=['GET', 'POST'])
+    def setup():
+        if app.settings_manager.get_setting('setup_complete'):
+            return redirect(url_for('dashboard'))
+
+        if request.method == 'POST':
+            password = request.form.get('password')
+            confirm_password = request.form.get('confirm_password')
+
+            if not password or password != confirm_password:
+                flash('Passwords do not match.', 'error')
+                return render_template('setup.html')
+
+            hashed_password = generate_password_hash(password)
+            app.settings_manager.update_settings({
+                'admin_password': hashed_password,
+                'setup_complete': True
+            })
+            flash('Admin account created successfully! Please log in.', 'success')
+            return redirect(url_for('login'))
+
+        return render_template('setup.html')
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if app.settings_manager.get_setting('setup_complete') and 'logged_in' in session:
+            return redirect(url_for('dashboard'))
+        if not app.settings_manager.get_setting('setup_complete'):
+            return redirect(url_for('setup'))
+
+        if request.method == 'POST':
+            password = request.form.get('password')
+            hashed_password = app.settings_manager.get_setting('admin_password')
+
+            if hashed_password and check_password_hash(hashed_password, password):
+                session['logged_in'] = True
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid password.', 'error')
+
+        return render_template('login.html')
+
+    @app.route('/logout')
+    def logout():
+        session.pop('logged_in', None)
+        flash('You have been logged out.', 'success')
+        return redirect(url_for('login'))
+
+
     @app.after_request
     def add_security_headers(response):
         """Add security headers for all responses"""
@@ -88,23 +152,28 @@ def create_app():
 
     # Frontend routes
     @app.route('/')
+    @login_required
     def dashboard():
         cameras = app.camera_manager.get_all_cameras()
         return render_template('dashboard.html', cameras=cameras)
 
-    @app.route('/setup')
+    @app.route('/camera_setup')
+    @login_required
     def camera_setup():
         return render_template('camera_setup.html')
 
     @app.route('/recordings')
+    @login_required
     def recordings():
         return render_template('recordings.html')
 
     @app.route('/settings')
+    @login_required
     def settings():
         return render_template('settings.html')
 
     @app.route('/onvif/<camera_id>')
+    @login_required
     def onvif_control(camera_id):
         return render_template('onvif_control.html', camera_id=camera_id)
 
