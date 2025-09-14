@@ -51,7 +51,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @api_bp.route('/auth/login', methods=['POST'])
     def login():
         """Login endpoint to get API token"""
-        data = request.json
+        data = request.get_json(silent=True) # Use silent=True to avoid errors on empty body
         # In a real application, you'd validate credentials here
         # For simplicity, we're using a single API token
         return jsonify({
