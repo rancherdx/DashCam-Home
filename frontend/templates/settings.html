@@ -8,50 +8,8 @@
         <button class="tab-btn active" onclick="openSettingsTab('general-tab')">General</button>
         <button class="tab-btn" onclick="openSettingsTab('storage-tab')">Storage</button>
         <button class="tab-btn" onclick="openSettingsTab('cloudflare-tab')">Cloudflare</button>
-        <button class="tab-btn" onclick="openSettingsTab('cameras-tab')">Cameras</button>
         <button class="tab-btn" onclick="openSettingsTab('motion-tab')">Motion</button>
         <button class="tab-btn" onclick="openSettingsTab('system-tab')">System</button>
-    </div>
-
-    <!-- Camera Management Tab -->
-    <div id="cameras-tab" class="settings-tab">
-        <h2>Camera Management</h2>
-        <button id="add-camera-btn" class="btn-primary">Add New Camera</button>
-        <div id="camera-list-container">
-            <!-- Camera list will be loaded here -->
-        </div>
-    </div>
-
-    <!-- Add/Edit Camera Modal -->
-    <div id="camera-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h2 id="modal-title">Add Camera</h2>
-            <form id="camera-form">
-                <input type="hidden" id="camera-id" name="id">
-                <div class="form-group">
-                    <label for="camera-name">Name</label>
-                    <input type="text" id="camera-name" name="name" required>
-                </div>
-                <div class="form-group">
-                    <label for="camera-ip">IP Address</label>
-                    <input type="text" id="camera-ip" name="ip" required>
-                </div>
-                <div class="form-group">
-                    <label for="camera-username">Username</label>
-                    <input type="text" id="camera-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="camera-password">Password</label>
-                    <input type="password" id="camera-password" name="password">
-                </div>
-                 <div class="form-group">
-                    <label for="camera-onvif-port">ONVIF Port</label>
-                    <input type="number" id="camera-onvif-port" name="onvif_port" value="80">
-                </div>
-                <button type="submit" class="btn-primary">Save Camera</button>
-            </form>
-        </div>
     </div>
 
     <!-- General Settings -->
@@ -202,7 +160,6 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
-<script src="{{ url_for('static', filename='js/camera_management.js') }}"></script>
 
 <script>
 function openSettingsTab(tabId) {
@@ -272,32 +229,6 @@ function showLogs() {
 </script>
 
 <style>
-.modal {
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.4);
-}
-.modal-content {
-    background-color: #fefefe;
-    margin: 15% auto;
-    padding: 20px;
-    border: 1px solid #888;
-    width: 80%;
-    max-width: 500px;
-    border-radius: 8px;
-}
-.close-btn {
-    color: #aaa;
-    float: right;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-}
 .settings-container {
     padding: 20px;
     max-width: 800px;
