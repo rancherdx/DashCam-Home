@@ -97,6 +97,26 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         camera_id = camera_manager.add_camera(data)
         return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'})
     
+    @api_bp.route('/api/cameras/<camera_id>', methods=['GET'])
+    @token_required
+    def get_camera(camera_id):
+        camera = camera_manager.get_camera_status(camera_id)
+        if not camera:
+            abort(404, description="Camera not found")
+        return jsonify(camera)
+
+    @api_bp.route('/api/cameras/<camera_id>', methods=['PUT'])
+    @token_required
+    def update_camera(camera_id):
+        data = request.json
+        if not data:
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+
+        success = camera_manager.update_camera(camera_id, data)
+        if not success:
+            abort(404, description="Camera not found or update failed")
+        return jsonify({'success': success, 'message': 'Camera updated successfully'})
+
     @api_bp.route('/api/cameras/<camera_id>', methods=['DELETE'])
     @token_required
     def remove_camera(camera_id):
@@ -156,6 +176,12 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         # Implement PTZ control logic here
         return jsonify({'success': True, 'command': command})
     
+    @api_bp.route('/api/onvif/motion_rules/<camera_id>/<profile_token>', methods=['GET'])
+    @token_required
+    def get_motion_rules(camera_id, profile_token):
+        rules = onvif_controller.get_motion_detection_rules(camera_id, profile_token)
+        return jsonify(rules)
+
     # Recording endpoints
     @api_bp.route('/api/recordings', methods=['GET'])
     @token_required
