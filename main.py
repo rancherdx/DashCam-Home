@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, send_from_directory, current_app, request
+from flask import Flask, jsonify, render_template, send_from_directory, current_app, request, redirect, url_for
 import logging
 import os
 import subprocess
@@ -89,24 +89,27 @@ def create_app():
     # Frontend routes
     @app.route('/')
     def dashboard():
+        if not app.camera_manager.get_all_cameras():
+            return redirect(url_for('camera_setup'))
+
         cameras = app.camera_manager.get_all_cameras()
-        return render_template('dashboard.html', cameras=cameras)
+        return render_template('dashboard.html', cameras=cameras, api_token=current_app.config['API_TOKEN'])
 
     @app.route('/setup')
     def camera_setup():
-        return render_template('camera_setup.html')
+        return render_template('camera_setup.html', api_token=current_app.config['API_TOKEN'])
 
     @app.route('/recordings')
     def recordings():
-        return render_template('recordings.html')
+        return render_template('recordings.html', api_token=current_app.config['API_TOKEN'])
 
     @app.route('/settings')
     def settings():
-        return render_template('settings.html')
+        return render_template('settings.html', api_token=current_app.config['API_TOKEN'])
 
     @app.route('/onvif/<camera_id>')
     def onvif_control(camera_id):
-        return render_template('onvif_control.html', camera_id=camera_id)
+        return render_template('onvif_control.html', camera_id=camera_id, api_token=current_app.config['API_TOKEN'])
 
     # Serve static files
     @app.route('/streams/<path:filename>')

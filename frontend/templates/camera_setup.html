@@ -2,6 +2,9 @@
 
 {% block content %}
 <div class="setup-container">
+    <div class="skip-setup">
+        <a href="/">Skip for now &raquo;</a>
+    </div>
     <h1>Add Camera</h1>
     
     <div class="setup-tabs">
@@ -132,9 +135,8 @@ document.getElementById('auto-setup-form').addEventListener('submit', async (e) 
     const data = Object.fromEntries(formData);
     
     try {
-        const response = await fetch('/api/cameras', {
+        const response = await dashboard.apiFetch('/api/cameras', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
         
@@ -142,7 +144,8 @@ document.getElementById('auto-setup-form').addEventListener('submit', async (e) 
             alert('Camera added successfully!');
             window.location.href = '/';
         } else {
-            alert('Error adding camera');
+            const errorData = await response.json();
+            alert('Error adding camera: ' + (errorData.message || 'Unknown error'));
         }
     } catch (error) {
         alert('Error adding camera: ' + error.message);
@@ -155,9 +158,8 @@ document.getElementById('manual-setup-form').addEventListener('submit', async (e
     const data = Object.fromEntries(formData);
     
     try {
-        const response = await fetch('/api/cameras', {
+        const response = await dashboard.apiFetch('/api/cameras', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ...data,
                 manual_setup: true
@@ -168,7 +170,8 @@ document.getElementById('manual-setup-form').addEventListener('submit', async (e
             alert('Camera added successfully!');
             window.location.href = '/';
         } else {
-            alert('Error adding camera');
+            const errorData = await response.json();
+            alert('Error adding camera: ' + (errorData.message || 'Unknown error'));
         }
     } catch (error) {
         alert('Error adding camera: ' + error.message);
@@ -181,7 +184,7 @@ async function discoverCameras() {
     btn.textContent = 'Discovering...';
     
     try {
-        const response = await fetch('/api/discover', { method: 'POST' });
+        const response = await dashboard.apiFetch('/api/discover', { method: 'POST' });
         const cameras = await response.json();
         
         const resultsDiv = document.getElementById('discovery-results');
@@ -218,6 +221,17 @@ function addDiscoveredCamera(ip) {
 </script>
 
 <style>
+.skip-setup {
+    text-align: right;
+    margin-bottom: 15px;
+}
+.skip-setup a {
+    color: #666;
+    text-decoration: none;
+}
+.skip-setup a:hover {
+    text-decoration: underline;
+}
 .setup-tabs {
     display: flex;
     margin-bottom: 20px;

@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to load settings and populate forms
     const loadSettings = async () => {
         try {
-            const response = await fetch('/api/settings');
+            const response = await dashboard.apiFetch('/api/settings');
             if (!response.ok) {
                 throw new Error('Failed to fetch settings');
             }
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'motion-tab':
                 const motionData = {};
-                const cameras = await (await fetch('/api/cameras', { headers: { 'X-Auth-Token': localStorage.getItem('api_token') } })).json();
+                const cameras = await (await dashboard.apiFetch('/api/cameras')).json();
                 cameras.forEach(camera => {
                     motionData[camera.id] = {
                         enabled: formData.has(`motion_enabled_${camera.id}`),
@@ -83,12 +83,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch('/api/settings', {
+            const response = await dashboard.apiFetch('/api/settings', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Auth-Token': localStorage.getItem('api_token')
-                },
                 body: JSON.stringify(settingsGroup)
             });
 
@@ -117,9 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch('/api/system/stats', {
-                headers: { 'X-Auth-Token': localStorage.getItem('api_token') }
-            });
+            const response = await dashboard.apiFetch('/api/system/stats');
             if (!response.ok) return;
 
             const stats = await response.json();
@@ -154,8 +148,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const populateMotionSettings = async () => {
         try {
             const [camResponse, settingsResponse] = await Promise.all([
-                fetch('/api/cameras', { headers: { 'X-Auth-Token': localStorage.getItem('api_token') } }),
-                fetch('/api/settings', { headers: { 'X-Auth-Token': localStorage.getItem('api_token') } })
+                dashboard.apiFetch('/api/cameras'),
+                dashboard.apiFetch('/api/settings')
             ]);
 
             if (!camResponse.ok || !settingsResponse.ok) {

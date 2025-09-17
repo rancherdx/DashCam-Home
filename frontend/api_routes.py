@@ -48,17 +48,6 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             return f(*args, **kwargs)
         return decorated_function
 
-    @api_bp.route('/auth/login', methods=['POST'])
-    def login():
-        """Login endpoint to get API token"""
-        data = request.json
-        # In a real application, you'd validate credentials here
-        # For simplicity, we're using a single API token
-        return jsonify({
-            'token': current_app.config.get('API_TOKEN'),
-            'expires': (datetime.now() + timedelta(hours=24)).isoformat()
-        })
-    
     @api_bp.route('/stream/auth/<camera_id>')
     @token_required
     def get_stream_auth(camera_id):
