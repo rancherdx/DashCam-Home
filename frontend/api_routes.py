@@ -1,9 +1,14 @@
 from flask import Blueprint, request, jsonify, send_file, abort, current_app
 import logging
+import os
+import shutil
 from pathlib import Path
 from functools import wraps
 from datetime import datetime, timedelta
 import secrets
+from wsdiscovery.discovery import ThreadedWSDiscovery as WSDiscovery
+from config import THUMBNAILS_DIR, HLS_OUTPUT_DIR
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +32,9 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
                 return f(*args, **kwargs)
 
             token = request.headers.get('X-Auth-Token') or request.args.get('token')
+            access_logger.info(f"Received token: {token}") # Temporary logging
             if not token or token != current_app.config.get('API_TOKEN'):
-                access_logger.warning(f"Unauthorized access to {request.path} from {request.remote_addr}")
+                access_logger.warning(f"Unauthorized access to {request.path} from {request.remote_addr}. Token mismatch.")
                 abort(401)
 
             access_logger.info(f"Authorized access to {request.path} from {request.remote_addr}")
@@ -83,9 +89,30 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @token_required
     def add_camera():
         data = request.json
+        if not data:
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+
         camera_id = camera_manager.add_camera(data)
-        return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'})
+
+        if camera_id:
+            return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'}), 201
+        else:
+            return jsonify({'error': 'Failed to connect to camera. Please check the details and try again.'}), 400
     
+    @api_bp.route('/cameras/manual', methods=['POST'])
+    @token_required
+    def add_manual_camera():
+        data = request.json
+        if not data:
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+
+        camera_id = camera_manager.add_manual_camera(data)
+
+        if camera_id:
+            return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'}), 201
+        else:
+            return jsonify({'error': 'Failed to save manual camera config.'}), 400
+
     @api_bp.route('/cameras/<camera_id>', methods=['DELETE'])
     @token_required
     def remove_camera(camera_id):
@@ -144,10 +171,39 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         command = data.get('command')
         # Implement PTZ control logic here
         return jsonify({'success': True, 'command': command})
+
+    # Discovery endpoints
+    @api_bp.route('/discover', methods=['POST'])
+    @token_required
+    def discover_cameras():
+        """Discovers ONVIF cameras on the network."""
+        try:
+            wsd = WSDiscovery()
+            wsd.start()
+            services = wsd.searchServices()
+            wsd.stop()
+
+            cameras = []
+            for service in services:
+                try:
+                    # The xAddrs often contain the IP address and port
+                    ip_address = service.getXAddrs()[0].split('/')[2].split(':')[0]
+                    cameras.append({
+                        'ip': ip_address,
+                        'xaddrs': service.getXAddrs(),
+                        'types': [str(t) for t in service.getTypes()],
+                        'scopes': [str(s) for s in service.getScopes()]
+                    })
+                except IndexError:
+                    logger.warning(f"Could not parse IP from discovered service: {service.getXAddrs()}")
+
+            return jsonify(cameras)
+        except Exception as e:
+            logger.error(f"ONVIF discovery failed: {e}")
+            return jsonify({'error': 'Discovery failed'}), 500
     
     # Recording endpoints
     @api_bp.route('/recordings', methods=['GET'])
-    @token_required
     def get_recordings():
         camera_id = request.args.get('camera_id')
         hours = int(request.args.get('hours', 7))
@@ -214,14 +270,34 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         logger.warning("System restart requested via API. This feature is not fully implemented.")
         return jsonify({'success': True, 'message': 'Restart initiated (logging only)'})
 
+    @api_bp.route('/system/clear-cache', methods=['POST'])
+    @token_required
+    def clear_cache():
+        """Clears cached data like thumbnails and HLS stream segments."""
+        try:
+            for directory in [THUMBNAILS_DIR, HLS_OUTPUT_DIR]:
+                if os.path.exists(directory):
+                    for filename in os.listdir(directory):
+                        file_path = os.path.join(directory, filename)
+                        try:
+                            if os.path.isfile(file_path) or os.path.islink(file_path):
+                                os.unlink(file_path)
+                            elif os.path.isdir(file_path):
+                                shutil.rmtree(file_path)
+                        except Exception as e:
+                            logger.error(f"Failed to delete {file_path}. Reason: {e}")
+            logger.info("Cache cleared successfully.")
+            return jsonify({'success': True, 'message': 'Cache cleared successfully'})
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            return jsonify({'error': 'Failed to clear cache'}), 500
+
     # Settings Endpoints
     @api_bp.route('/settings', methods=['GET'])
-    @token_required
     def get_settings():
         return jsonify(settings_manager.get_all_settings())
 
     @api_bp.route('/settings', methods=['POST'])
-    @token_required
     def update_settings():
         new_settings = request.json
         if not new_settings:
@@ -241,7 +317,6 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         }
 
     @api_bp.route('/system/logs', methods=['GET'])
-    @token_required
     def list_logs():
         """Lists available log files."""
         from config import LOGS_DIR

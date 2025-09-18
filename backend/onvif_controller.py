@@ -91,3 +91,9 @@ class ONVIFController:
         except Exception as e:
             logger.error(f"PTZ control failed for camera {camera_id}: {e}")
             return False
+
+    def disconnect_camera(self, camera_id: str):
+        """Disconnects from an ONVIF camera and removes the client."""
+        if camera_id in self.clients:
+            del self.clients[camera_id]
+            logger.info(f"Disconnected from ONVIF camera {camera_id}")

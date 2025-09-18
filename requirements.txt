@@ -5,3 +5,4 @@ wsdiscovery==2.0.0
 opencv-python==4.8.1.78
 python-dotenv==1.0.0
 numpy==1.26.4
+psutil==5.9.8
