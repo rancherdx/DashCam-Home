@@ -4,8 +4,8 @@ class CameraDashboard {
     constructor() {
         this.cameras = [];
         this.streams = new Map();
-        this.apiToken = null;
-        this.isAuthenticated = false;
+        this.apiToken = window.API_TOKEN;
+        this.isAuthenticated = !!window.API_TOKEN;
         this.autoRefreshInterval = null;
         this.thumbnailRefreshInterval = null;
         this.init();
@@ -20,8 +20,10 @@ class CameraDashboard {
             // Show loading state
             this.showLoadingState();
             
-            // Initialize authentication
-            await this.initializeAuth();
+            if (!this.isAuthenticated) {
+                console.error("API Token not found. Authentication will fail.");
+                this.showNotification("API Token not found. Please configure it in your environment.", "error");
+            }
             
             // Load cameras and setup the interface
             await this.loadCameras();
@@ -37,62 +39,13 @@ class CameraDashboard {
         }
     }
 
-    async initializeAuth() {
-        try {
-            // Try to get token from localStorage first
-            this.apiToken = localStorage.getItem('api_token');
-            const tokenExpiry = localStorage.getItem('api_token_expiry');
-            
-            // Check if token is expired
-            if (this.apiToken && tokenExpiry && new Date() < new Date(tokenExpiry)) {
-                this.isAuthenticated = true;
-                return;
-            }
-            
-            // If no valid token, login to get one
-            await this.authenticate();
-            
-        } catch (error) {
-            console.error('Authentication initialization failed:', error);
-            throw new Error('Authentication failed');
-        }
-    }
-
-    async authenticate() {
-        try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-Auth-Token': 'initial-request' // Special header for initial auth
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            this.apiToken = data.token;
-            this.isAuthenticated = true;
-            
-            // Store token with expiry
-            localStorage.setItem('api_token', this.apiToken);
-            if (data.expires) {
-                localStorage.setItem('api_token_expiry', data.expires);
-            }
-            
-            console.log('Authentication successful');
-            
-        } catch (error) {
-            console.error('Authentication failed:', error);
-            this.isAuthenticated = false;
-            throw error;
-        }
-    }
-
     async apiFetch(url, options = {}) {
-        // Add authentication token to all API requests
+        if (!this.isAuthenticated) {
+            console.error('Cannot make API call, not authenticated.');
+            this.showNotification('Authentication token is missing.', 'error');
+            return Promise.reject('Missing API Token');
+        }
+
         const headers = {
             'X-Auth-Token': this.apiToken,
             'Content-Type': 'application/json',
@@ -107,19 +60,9 @@ class CameraDashboard {
         try {
             const response = await fetch(url, { ...options, headers });
             
-            if (response.status === 401) {
-                // Token expired, reauthenticate
-                console.log('Token expired, reauthenticating...');
-                localStorage.removeItem('api_token');
-                localStorage.removeItem('api_token_expiry');
-                await this.authenticate();
-                
-                // Retry the original request with new token
-                headers['X-Auth-Token'] = this.apiToken;
-                return await fetch(url, { ...options, headers });
-            }
-            
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`HTTP ${response.status}: ${response.statusText}`, errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
