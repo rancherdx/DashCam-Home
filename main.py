@@ -158,4 +158,4 @@ if __name__ == "__main__":
     logger.info("Starting Camera Dashboard on http://0.0.0.0:5000")
     logger.info(f"Cloudflare Tunnel: {app.config['CLOUDFLARE_TUNNEL']}")
 
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)

@@ -60,7 +60,7 @@ class MotionDetector:
                 # Initialize capture and background subtractor if not already done
                 if cam_id not in video_captures:
                     # Use a low-resolution stream for efficiency if available
-                    rtsp_uri = self.camera_manager.onvif_controller.get_rtsp_uri(cam_id) # This could be enhanced
+                    rtsp_uri = self.camera_manager.onvif_controller.get_stream_uri(cam_id) # This could be enhanced
                     if not rtsp_uri:
                         continue
 

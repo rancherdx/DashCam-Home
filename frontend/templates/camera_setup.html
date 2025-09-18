@@ -75,15 +75,38 @@
                 <input type="text" name="name" placeholder="Custom Camera" required>
             </div>
 
+            <div class="form-row">
+                <div class="form-group">
+                    <label>IP Address / Hostname</label>
+                    <input type="text" name="ip" placeholder="192.168.1.101" required>
+                </div>
+                <div class="form-group">
+                    <label>RTSP Port</label>
+                    <input type="number" name="rtsp_port" value="554" required>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" placeholder="admin">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password">
+                </div>
+            </div>
+
             <div class="form-group">
-                <label>RTSP URL</label>
-                <input type="text" name="rtsp_url" placeholder="rtsp://username:password@ip:port/stream" required>
-                <small class="form-help">Full RTSP URL including credentials</small>
+                <label>Stream Path</label>
+                <input type="text" name="rtsp_path" placeholder="/stream1">
+                <small class="form-help">e.g., /stream1, /cam/realmonitor?channel=1&subtype=0</small>
             </div>
 
             <div class="form-group">
                 <label>Transport Protocol</label>
                 <select name="transport">
+                    <option value="auto">Auto</option>
                     <option value="tcp">TCP</option>
                     <option value="udp">UDP</option>
                 </select>
@@ -145,7 +168,7 @@ document.getElementById('auto-setup-form').addEventListener('submit', async (e) 
             window.location.href = '/';
         } else {
             const errorData = await response.json();
-            alert('Error adding camera: ' + (errorData.message || 'Unknown error'));
+            alert('Error adding camera: ' + (errorData.error || 'Unknown error'));
         }
     } catch (error) {
         alert('Error adding camera: ' + error.message);
@@ -158,12 +181,9 @@ document.getElementById('manual-setup-form').addEventListener('submit', async (e
     const data = Object.fromEntries(formData);
     
     try {
-        const response = await dashboard.apiFetch('/api/cameras', {
+        const response = await dashboard.apiFetch('/api/cameras/manual', {
             method: 'POST',
-            body: JSON.stringify({
-                ...data,
-                manual_setup: true
-            })
+            body: JSON.stringify(data)
         });
         
         if (response.ok) {
@@ -171,7 +191,7 @@ document.getElementById('manual-setup-form').addEventListener('submit', async (e
             window.location.href = '/';
         } else {
             const errorData = await response.json();
-            alert('Error adding camera: ' + (errorData.message || 'Unknown error'));
+            alert('Error adding camera: ' + (errorData.error || 'Unknown error'));
         }
     } catch (error) {
         alert('Error adding camera: ' + error.message);

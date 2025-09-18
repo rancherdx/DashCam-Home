@@ -49,17 +49,57 @@ class CameraManager:
         )
 
     def add_camera(self, camera_config: dict) -> str:
-        """Adds a new camera, saves it to config, and connects."""
+        """Tests connection and adds a new camera, then saves to config."""
         camera_id = str(uuid.uuid4())
+
+        # Test the connection first
+        can_connect = self.onvif_controller.connect_camera(
+            camera_id,
+            camera_config['ip'],
+            camera_config.get('onvif_port', 80),
+            camera_config['username'],
+            camera_config['password']
+        )
+
+        if not can_connect:
+            logger.error(f"Could not connect to camera {camera_config.get('name')} at {camera_config.get('ip')}. Not saving.")
+            return None
+
+        # If connection is successful, proceed to add and save
         camera_config['id'] = camera_id
         camera_config['created_at'] = datetime.now().isoformat()
 
         if self.settings_manager.add_camera_config(camera_config):
-            self._add_camera_from_config(camera_config)
-            logger.info(f"Successfully added and saved new camera: {camera_config.get('name')}")
+            self.cameras[camera_id] = camera_config
+            logger.info(f"Successfully connected, added, and saved new camera: {camera_config.get('name')}")
             return camera_id
         else:
             logger.error(f"Failed to save new camera to config: {camera_config.get('name')}")
+            # Disconnect since we failed to save
+            self.onvif_controller.disconnect_camera(camera_id)
+            return None
+
+    def add_manual_camera(self, camera_config: dict) -> str:
+        """Adds a camera with manual configuration, without ONVIF test."""
+        camera_id = str(uuid.uuid4())
+        camera_config['id'] = camera_id
+        camera_config['created_at'] = datetime.now().isoformat()
+        camera_config['manual_setup'] = True
+
+        # Construct RTSP URL if not provided
+        if 'rtsp_url' not in camera_config or not camera_config['rtsp_url']:
+            user = camera_config.get('username', '')
+            pwd = camera_config.get('password', '')
+            credentials = f"{user}:{pwd}@" if user and pwd else ""
+            path = camera_config.get('rtsp_path', '/')
+            camera_config['rtsp_url'] = f"rtsp://{credentials}{camera_config['ip']}:{camera_config['rtsp_port']}{path}"
+
+        if self.settings_manager.add_camera_config(camera_config):
+            self._add_camera_from_config(camera_config)
+            logger.info(f"Successfully added and saved new manual camera: {camera_config.get('name')}")
+            return camera_id
+        else:
+            logger.error(f"Failed to save new manual camera to config: {camera_config.get('name')}")
             return None
 
     def remove_camera(self, camera_id: str) -> bool:
@@ -112,7 +152,7 @@ class CameraManager:
 
         camera_config = self.cameras[camera_id]
 
-        rtsp_uri = self.onvif_controller.get_rtsp_uri(camera_id, profile_token)
+        rtsp_uri = self.onvif_controller.get_stream_uri(camera_id, profile_token)
         if not rtsp_uri:
             rtsp_port = camera_config.get('rtsp_port', 554)
             rtsp_path = camera_config.get('rtsp_path', '/stream1')

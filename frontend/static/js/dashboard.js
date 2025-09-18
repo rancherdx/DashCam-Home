@@ -135,6 +135,9 @@ class CameraDashboard {
                         ${camera.recording ? '⏹️ Stop' : '⏺️ Record'}
                     </button>
                     <a href="/onvif/${camera.id}" class="btn-small">🎮 PTZ</a>
+                    <button class="btn-small btn-danger" onclick="dashboard.deleteCamera('${camera.id}', '${this.escapeHtml(camera.name)}')">
+                        🗑️ Delete
+                    </button>
                 </div>
                 
                 <div class="camera-info">
@@ -205,6 +208,28 @@ class CameraDashboard {
             }
         } catch (error) {
             this.showNotification('Error controlling recording: ' + error.message, 'error');
+        }
+    }
+
+    async deleteCamera(cameraId, cameraName) {
+        if (!confirm(`Are you sure you want to delete the camera "${cameraName}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const response = await this.apiFetch(`/api/cameras/${cameraId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.showNotification(`Camera "${cameraName}" deleted successfully.`, 'success');
+                await this.loadCameras(); // Refresh the camera list
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to delete camera');
+            }
+        } catch (error) {
+            this.showNotification(`Error deleting camera: ${error.message}`, 'error');
         }
     }
 
