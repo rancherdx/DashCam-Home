@@ -100,10 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Attach event listeners to all forms
-    settingsForms.forEach(form => {
-        form.addEventListener('submit', handleFormSubmit);
-    });
 
     // Function to update system stats
     const updateSystemStats = async () => {
@@ -139,11 +135,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error fetching system stats:', error);
         }
     };
-
-    // Attach event listeners to all forms
-    settingsForms.forEach(form => {
-        form.addEventListener('submit', handleFormSubmit);
-    });
 
     const populateMotionSettings = async () => {
         try {

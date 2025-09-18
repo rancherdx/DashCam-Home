@@ -70,7 +70,7 @@ class CameraManager:
         camera_config['created_at'] = datetime.now().isoformat()
 
         if self.settings_manager.add_camera_config(camera_config):
-            self.cameras[camera_id] = camera_config
+            self._add_camera_from_config(camera_config)
             logger.info(f"Successfully connected, added, and saved new camera: {camera_config.get('name')}")
             return camera_id
         else:
@@ -80,7 +80,8 @@ class CameraManager:
             return None
 
     def add_manual_camera(self, camera_config: dict) -> str:
-        """Adds a camera with manual configuration, without ONVIF test."""
+        """Adds a camera with manual configuration, with a connection test."""
+        import cv2
         camera_id = str(uuid.uuid4())
         camera_config['id'] = camera_id
         camera_config['created_at'] = datetime.now().isoformat()
@@ -92,7 +93,18 @@ class CameraManager:
             pwd = camera_config.get('password', '')
             credentials = f"{user}:{pwd}@" if user and pwd else ""
             path = camera_config.get('rtsp_path', '/')
-            camera_config['rtsp_url'] = f"rtsp://{credentials}{camera_config['ip']}:{camera_config['rtsp_port']}{path}"
+            rtsp_url = f"rtsp://{credentials}{camera_config['ip']}:{camera_config['rtsp_port']}{path}"
+            camera_config['rtsp_url'] = rtsp_url
+        else:
+            rtsp_url = camera_config['rtsp_url']
+
+        # Test the connection
+        cap = cv2.VideoCapture(rtsp_url)
+        if not cap.isOpened():
+            logger.error(f"Could not open RTSP stream for manual camera: {rtsp_url}")
+            cap.release()
+            return None
+        cap.release()
 
         if self.settings_manager.add_camera_config(camera_config):
             self._add_camera_from_config(camera_config)
