@@ -153,16 +153,16 @@ document.querySelectorAll('.settings-form').forEach(form => {
         const data = Object.fromEntries(formData);
         
         try {
-            const response = await fetch('/api/settings', {
+            const response = await dashboard.apiFetch('/api/settings', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
             
             if (response.ok) {
                 alert('Settings saved successfully!');
             } else {
-                alert('Error saving settings');
+                const errorData = await response.json();
+                alert('Error saving settings: ' + (errorData.error || 'Unknown error'));
             }
         } catch (error) {
             alert('Error saving settings: ' + error.message);

@@ -69,10 +69,10 @@ class SettingsManager:
     def add_camera_config(self, camera_config: Dict) -> bool:
         """Adds a new camera configuration and saves."""
         with self._lock:
-            # Avoid adding duplicates based on name or IP
-            existing_ips = {c.get('ip') for c in self.settings['cameras']}
-            if camera_config.get('ip') in existing_ips:
-                logger.warning(f"Camera with IP {camera_config.get('ip')} already exists.")
+            # Avoid adding duplicates based on ID
+            existing_ids = {c.get('id') for c in self.settings['cameras']}
+            if camera_config.get('id') in existing_ids:
+                logger.warning(f"Camera with ID {camera_config.get('id')} already exists.")
                 return False
 
             self.settings['cameras'].append(camera_config)

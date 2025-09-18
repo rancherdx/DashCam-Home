@@ -32,9 +32,8 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
                 return f(*args, **kwargs)
 
             token = request.headers.get('X-Auth-Token') or request.args.get('token')
-            access_logger.info(f"Received token: {token}") # Temporary logging
             if not token or token != current_app.config.get('API_TOKEN'):
-                access_logger.warning(f"Unauthorized access to {request.path} from {request.remote_addr}. Token mismatch.")
+                access_logger.warning(f"Unauthorized access to {request.path} from {request.remote_addr}")
                 abort(401)
 
             access_logger.info(f"Authorized access to {request.path} from {request.remote_addr}")
@@ -117,7 +116,10 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @token_required
     def remove_camera(camera_id):
         success = camera_manager.remove_camera(camera_id)
-        return jsonify({'success': success, 'message': 'Camera removed' if success else 'Camera not found'})
+        if success:
+            return jsonify({'message': 'Camera removed successfully'})
+        else:
+            return jsonify({'error': 'Failed to remove camera'}), 404
     
     # Stream control endpoints
     @api_bp.route('/stream/start/<camera_id>', methods=['POST'])
@@ -126,20 +128,29 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         data = request.json or {}
         profile = data.get('profile', 'main')
         success = camera_manager.start_stream(camera_id, profile)
-        return jsonify({'success': success, 'message': 'Stream started' if success else 'Stream start failed'})
+        if success:
+            return jsonify({'message': 'Stream started successfully'})
+        else:
+            return jsonify({'error': 'Failed to start stream'}), 500
     
     @api_bp.route('/stream/stop/<camera_id>', methods=['POST'])
     @token_required
     def stop_stream(camera_id):
         success = camera_manager.stop_stream(camera_id)
-        return jsonify({'success': success, 'message': 'Stream stopped' if success else 'Stream stop failed'})
+        if success:
+            return jsonify({'message': 'Stream stopped successfully'})
+        else:
+            return jsonify({'error': 'Failed to stop stream'}), 500
     
     @api_bp.route('/stream/restart/<camera_id>', methods=['POST'])
     @token_required
     def restart_stream(camera_id):
         camera_manager.stop_stream(camera_id)
         success = camera_manager.start_stream(camera_id)
-        return jsonify({'success': success, 'message': 'Stream restarted' if success else 'Stream restart failed'})
+        if success:
+            return jsonify({'message': 'Stream restarted successfully'})
+        else:
+            return jsonify({'error': 'Failed to restart stream'}), 500
     
     # ONVIF endpoints
     @api_bp.route('/onvif/connect/<camera_id>', methods=['POST'])
@@ -204,6 +215,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     
     # Recording endpoints
     @api_bp.route('/recordings', methods=['GET'])
+    @token_required
     def get_recordings():
         camera_id = request.args.get('camera_id')
         hours = int(request.args.get('hours', 7))
@@ -294,10 +306,12 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
 
     # Settings Endpoints
     @api_bp.route('/settings', methods=['GET'])
+    @token_required
     def get_settings():
         return jsonify(settings_manager.get_all_settings())
 
     @api_bp.route('/settings', methods=['POST'])
+    @token_required
     def update_settings():
         new_settings = request.json
         if not new_settings:
@@ -317,6 +331,7 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         }
 
     @api_bp.route('/system/logs', methods=['GET'])
+    @token_required
     def list_logs():
         """Lists available log files."""
         from config import LOGS_DIR

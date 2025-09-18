@@ -226,7 +226,7 @@ class CameraDashboard {
                 await this.loadCameras(); // Refresh the camera list
             } else {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to delete camera');
+                throw new Error(errorData.error || 'Failed to delete camera');
             }
         } catch (error) {
             this.showNotification(`Error deleting camera: ${error.message}`, 'error');
@@ -267,7 +267,7 @@ class CameraDashboard {
             }, 2000);
             
         } catch (error) {
-            this.showNotification('Failed to restart stream: ' + error.message, 'error');
+            this.showNotification('Failed to restart stream: ' + (error.error || error.message), 'error');
         }
     }
 
