@@ -72,6 +72,21 @@
                     <input type="range" id="wdr-level" min="0" max="100" onchange="updateSetting('wdr', this.value)">
                     <span id="wdr-value">50%</span>
                 </div>
+                <div class="setting-item">
+                    <label>Brightness</label>
+                    <input type="range" id="brightness-level" min="0" max="100" onchange="updateSetting('brightness', this.value)">
+                    <span id="brightness-value">50%</span>
+                </div>
+                <div class="setting-item">
+                    <label>Contrast</label>
+                    <input type="range" id="contrast-level" min="0" max="100" onchange="updateSetting('contrast', this.value)">
+                    <span id="contrast-value">50%</span>
+                </div>
+                <div class="setting-item">
+                    <label>Saturation</label>
+                    <input type="range" id="saturation-level" min="0" max="100" onchange="updateSetting('saturation', this.value)">
+                    <span id="saturation-value">50%</span>
+                </div>
             </div>
         </div>
     </div>
@@ -172,6 +187,18 @@ async function loadSettings() {
         if (settings.wdr) {
             document.getElementById('wdr-level').value = settings.wdr;
             document.getElementById('wdr-value').textContent = settings.wdr + '%';
+        }
+        if (settings.brightness) {
+            document.getElementById('brightness-level').value = settings.brightness;
+            document.getElementById('brightness-value').textContent = settings.brightness + '%';
+        }
+        if (settings.contrast) {
+            document.getElementById('contrast-level').value = settings.contrast;
+            document.getElementById('contrast-value').textContent = settings.contrast + '%';
+        }
+        if (settings.saturation) {
+            document.getElementById('saturation-level').value = settings.saturation;
+            document.getElementById('saturation-value').textContent = settings.saturation + '%';
         }
     } catch (error) {
         console.error('Error loading settings:', error);

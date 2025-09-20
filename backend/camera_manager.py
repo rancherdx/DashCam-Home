@@ -114,6 +114,25 @@ class CameraManager:
             logger.error(f"Failed to save new manual camera to config: {camera_config.get('name')}")
             return None
 
+    def update_camera(self, camera_id: str, camera_config: dict) -> bool:
+        """Updates a camera's configuration."""
+        if camera_id not in self.cameras:
+            return False
+
+        # Stop existing streams before updating
+        self.stop_stream(camera_id)
+
+        if self.settings_manager.update_camera_config(camera_id, camera_config):
+            # Reload the camera from the updated config
+            updated_config = self.settings_manager.get_camera_config(camera_id)
+            if updated_config:
+                self._add_camera_from_config(updated_config)
+                logger.info(f"Successfully updated camera: {camera_config.get('name')}")
+                return True
+
+        logger.error(f"Failed to update camera config for ID: {camera_id}")
+        return False
+
     def remove_camera(self, camera_id: str) -> bool:
         """Removes a camera from runtime and from the config file."""
         if camera_id in self.cameras:
@@ -153,7 +172,7 @@ class CameraManager:
             cameras_list.append(self.get_camera_status(cam_id))
         return cameras_list
 
-    def start_stream(self, camera_id: str, profile_token: str = "main") -> bool:
+    def start_stream(self, camera_id: str, profile_token: str = None) -> bool:
         if camera_id not in self.cameras:
             logger.error(f"Cannot start stream: camera ID {camera_id} not found.")
             return False
@@ -163,6 +182,10 @@ class CameraManager:
             return True
 
         camera_config = self.cameras[camera_id]
+
+        # Use the saved profile token if it exists
+        if not profile_token:
+            profile_token = camera_config.get('profile_token')
 
         rtsp_uri = self.onvif_controller.get_stream_uri(camera_id, profile_token)
         if not rtsp_uri:

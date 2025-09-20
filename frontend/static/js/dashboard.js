@@ -135,6 +135,9 @@ class CameraDashboard {
                         ${camera.recording ? '⏹️ Stop' : '⏺️ Record'}
                     </button>
                     <a href="/onvif/${camera.id}" class="btn-small">🎮 PTZ</a>
+                    <button class="btn-small" onclick="dashboard.editCamera('${camera.id}')">
+                        ✏️ Edit
+                    </button>
                     <button class="btn-small btn-danger" onclick="dashboard.deleteCamera('${camera.id}', '${this.escapeHtml(camera.name)}')">
                         🗑️ Delete
                     </button>
@@ -211,7 +214,12 @@ class CameraDashboard {
         }
     }
 
+    async editCamera(cameraId) {
+        window.location.href = `/setup?camera_id=${cameraId}`;
+    }
+
     async deleteCamera(cameraId, cameraName) {
+        console.log(`Deleting camera: ${cameraName} (${cameraId})`);
         if (!confirm(`Are you sure you want to delete the camera "${cameraName}"? This action cannot be undone.`)) {
             return;
         }
