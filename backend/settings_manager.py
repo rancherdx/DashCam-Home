@@ -66,6 +66,27 @@ class SettingsManager:
         with self._lock:
             return self.settings.get('cameras', [])
 
+    def get_camera_config(self, camera_id: str) -> Optional[Dict]:
+        """Gets a single camera configuration by its ID."""
+        with self._lock:
+            for camera in self.settings.get('cameras', []):
+                if camera.get('id') == camera_id:
+                    return camera
+        return None
+
+    def update_camera_config(self, camera_id: str, camera_config: Dict) -> bool:
+        """Updates an existing camera configuration."""
+        with self._lock:
+            for i, cam in enumerate(self.settings['cameras']):
+                if cam.get('id') == camera_id:
+                    # Preserve original ID and creation date
+                    camera_config['id'] = cam.get('id')
+                    camera_config['created_at'] = cam.get('created_at')
+                    self.settings['cameras'][i] = camera_config
+                    self._save_settings()
+                    return True
+        return False
+
     def add_camera_config(self, camera_config: Dict) -> bool:
         """Adds a new camera configuration and saves."""
         with self._lock:

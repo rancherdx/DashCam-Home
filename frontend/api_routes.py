@@ -6,6 +6,7 @@ from pathlib import Path
 from functools import wraps
 from datetime import datetime, timedelta
 import secrets
+from urllib.parse import urlparse
 from wsdiscovery.discovery import ThreadedWSDiscovery as WSDiscovery
 from config import THUMBNAILS_DIR, HLS_OUTPUT_DIR
 
@@ -83,6 +84,15 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
     @token_required
     def get_cameras():
         return jsonify(camera_manager.get_all_cameras())
+
+    @api_bp.route('/cameras/<camera_id>', methods=['GET'])
+    @token_required
+    def get_camera(camera_id):
+        camera = camera_manager.get_camera_status(camera_id)
+        if camera:
+            return jsonify(camera)
+        else:
+            return jsonify({'error': 'Camera not found'}), 404
     
     @api_bp.route('/cameras', methods=['POST'])
     @token_required
@@ -111,6 +121,41 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             return jsonify({'camera_id': camera_id, 'message': 'Camera added successfully'}), 201
         else:
             return jsonify({'error': 'Failed to save manual camera config.'}), 400
+
+    @api_bp.route('/cameras/<camera_id>', methods=['PUT'])
+    @token_required
+    def update_camera(camera_id):
+        data = request.json
+        if not data:
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+
+        success = camera_manager.update_camera(camera_id, data)
+        if success:
+            return jsonify({'message': 'Camera updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update camera'}), 400
+
+    @api_bp.route('/cameras/<camera_id>/profile', methods=['PUT'])
+    @token_required
+    def set_camera_profile(camera_id):
+        data = request.json
+        profile_token = data.get('profile_token')
+        if not profile_token:
+            return jsonify({'error': 'Missing profile_token'}), 400
+
+        # Get existing camera config
+        camera_config = camera_manager.get_camera_status(camera_id)
+        if not camera_config:
+            return jsonify({'error': 'Camera not found'}), 404
+
+        # Update the profile token
+        camera_config['profile_token'] = profile_token
+
+        success = camera_manager.update_camera(camera_id, camera_config)
+        if success:
+            return jsonify({'message': 'Profile token updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update profile token'}), 400
 
     @api_bp.route('/cameras/<camera_id>', methods=['DELETE'])
     @token_required
@@ -175,6 +220,25 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
         profiles = onvif_controller.get_profiles(camera_id)
         return jsonify(profiles)
     
+    @api_bp.route('/onvif/settings/<camera_id>', methods=['GET'])
+    @token_required
+    def get_onvif_settings(camera_id):
+        settings = onvif_controller.get_imaging_settings(camera_id)
+        if settings:
+            return jsonify(settings)
+        else:
+            return jsonify({'error': 'Failed to get settings'}), 404
+
+    @api_bp.route('/onvif/settings/<camera_id>', methods=['POST'])
+    @token_required
+    def set_onvif_settings(camera_id):
+        data = request.json
+        success = onvif_controller.set_imaging_settings(camera_id, data)
+        if success:
+            return jsonify({'message': 'Settings updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update settings'}), 400
+
     @api_bp.route('/onvif/ptz/<camera_id>', methods=['POST'])
     @token_required
     def ptz_control(camera_id):
@@ -198,15 +262,19 @@ def create_api_routes(camera_manager, stream_processor, onvif_controller, record
             for service in services:
                 try:
                     # The xAddrs often contain the IP address and port
-                    ip_address = service.getXAddrs()[0].split('/')[2].split(':')[0]
+                    addr = service.getXAddrs()[0]
+                    parsed_addr = urlparse(addr)
+                    ip_address = parsed_addr.hostname
+                    port = parsed_addr.port or 80
                     cameras.append({
                         'ip': ip_address,
+                        'port': port,
                         'xaddrs': service.getXAddrs(),
                         'types': [str(t) for t in service.getTypes()],
                         'scopes': [str(s) for s in service.getScopes()]
                     })
-                except IndexError:
-                    logger.warning(f"Could not parse IP from discovered service: {service.getXAddrs()}")
+                except (IndexError, AttributeError) as e:
+                    logger.warning(f"Could not parse IP/port from discovered service: {service.getXAddrs()}. Error: {e}")
 
             return jsonify(cameras)
         except Exception as e:

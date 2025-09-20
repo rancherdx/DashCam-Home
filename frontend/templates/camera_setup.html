@@ -27,6 +27,10 @@
                     <input type="text" name="ip" placeholder="192.168.1.100" required>
                 </div>
                 <div class="form-group">
+                    <label>ONVIF Port</label>
+                    <input type="number" name="onvif_port" value="80" required>
+                </div>
+                <div class="form-group">
                     <label>RTSP Port</label>
                     <input type="number" name="rtsp_port" value="554" required>
                 </div>
@@ -65,6 +69,11 @@
 
             <button type="submit" class="btn-primary">Add Camera</button>
         </form>
+
+        <div id="profile-selection" style="display: none;">
+            <h3>Select a Stream Profile</h3>
+            <div id="profile-list" class="profile-list"></div>
+        </div>
     </div>
 
     <!-- Manual Setup Tab -->
@@ -135,6 +144,37 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const cameraId = urlParams.get('camera_id');
+
+    if (cameraId) {
+        document.querySelector('h1').textContent = 'Edit Camera';
+        // Fetch camera data and populate form
+        dashboard.apiFetch(`/api/cameras/${cameraId}`)
+            .then(response => response.json())
+            .then(camera => {
+                // Determine which form to populate
+                const formId = camera.manual_setup ? 'manual-setup-form' : 'auto-setup-form';
+                const form = document.getElementById(formId);
+
+                Object.keys(camera).forEach(key => {
+                    const input = form.querySelector(`[name="${key}"]`);
+                    if (input) {
+                        if (input.type === 'checkbox') {
+                            input.checked = camera[key];
+                        } else {
+                            input.value = camera[key];
+                        }
+                    }
+                });
+
+                // Show the correct tab
+                openTab(camera.manual_setup ? 'manual-tab' : 'auto-tab');
+            });
+    }
+});
+
 function openTab(tabId) {
     // Hide all tab contents
     document.querySelectorAll('.tab-content').forEach(tab => {
@@ -156,16 +196,21 @@ document.getElementById('auto-setup-form').addEventListener('submit', async (e) 
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData);
+    const urlParams = new URLSearchParams(window.location.search);
+    const cameraId = urlParams.get('camera_id');
+
+    const method = cameraId ? 'PUT' : 'POST';
+    const url = cameraId ? `/api/cameras/${cameraId}` : '/api/cameras';
     
     try {
-        const response = await dashboard.apiFetch('/api/cameras', {
-            method: 'POST',
+        const response = await dashboard.apiFetch(url, {
+            method: method,
             body: JSON.stringify(data)
         });
         
         if (response.ok) {
-            alert('Camera added successfully!');
-            window.location.href = '/';
+            const result = await response.json();
+            fetchAndDisplayProfiles(result.camera_id);
         } else {
             const errorData = await response.json();
             alert('Error adding camera: ' + (errorData.error || 'Unknown error'));
@@ -179,16 +224,21 @@ document.getElementById('manual-setup-form').addEventListener('submit', async (e
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData);
+    const urlParams = new URLSearchParams(window.location.search);
+    const cameraId = urlParams.get('camera_id');
+
+    const method = cameraId ? 'PUT' : 'POST';
+    const url = cameraId ? `/api/cameras/${cameraId}` : '/api/cameras/manual';
     
     try {
-        const response = await dashboard.apiFetch('/api/cameras/manual', {
-            method: 'POST',
+        const response = await dashboard.apiFetch(url, {
+            method: method,
             body: JSON.stringify(data)
         });
         
         if (response.ok) {
-            alert('Camera added successfully!');
-            window.location.href = '/';
+            const result = await response.json();
+            fetchAndDisplayProfiles(result.camera_id);
         } else {
             const errorData = await response.json();
             alert('Error adding camera: ' + (errorData.error || 'Unknown error'));
@@ -218,8 +268,8 @@ async function discoverCameras() {
             cameras.forEach(cam => {
                 listDiv.innerHTML += `
                     <div class="discovered-camera">
-                        <strong>${cam.ip}</strong> - ${cam.name || 'Unknown'}
-                        <button onclick="addDiscoveredCamera('${cam.ip}')">Add</button>
+                        <strong>${cam.ip}:${cam.port}</strong>
+                        <button onclick="addDiscoveredCamera('${cam.ip}', '${cam.port}')">Add</button>
                     </div>
                 `;
             });
@@ -234,8 +284,59 @@ async function discoverCameras() {
     }
 }
 
-function addDiscoveredCamera(ip) {
+async function fetchAndDisplayProfiles(cameraId) {
+    try {
+        const response = await dashboard.apiFetch(`/api/onvif/profiles/${cameraId}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch profiles');
+        }
+        const profiles = await response.json();
+        const profileList = document.getElementById('profile-list');
+        profileList.innerHTML = '';
+
+        if (profiles.length === 0) {
+            profileList.innerHTML = '<p>No stream profiles found. You can still use the camera with its default settings.</p>';
+        } else {
+            profiles.forEach(profile => {
+                profileList.innerHTML += `
+                    <div class="profile-item">
+                        <span>${profile.name} (${profile.width}x${profile.height}, ${profile.codec})</span>
+                        <button onclick="selectProfile('${cameraId}', '${profile.token}')">Select</button>
+                    </div>
+                `;
+            });
+        }
+        document.getElementById('profile-selection').style.display = 'block';
+    } catch (error) {
+        console.error('Error fetching profiles:', error);
+        alert('Could not fetch stream profiles. The camera has been added with default settings.');
+        window.location.href = '/';
+    }
+}
+
+async function selectProfile(cameraId, profileToken) {
+    try {
+        const response = await dashboard.apiFetch(`/api/cameras/${cameraId}/profile`, {
+            method: 'PUT',
+            body: JSON.stringify({ profile_token: profileToken })
+        });
+
+        if (response.ok) {
+            alert('Stream profile selected successfully!');
+            window.location.href = '/';
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to select profile');
+        }
+    } catch (error) {
+        console.error('Error selecting profile:', error);
+        alert(`Error: ${error.message}`);
+    }
+}
+
+function addDiscoveredCamera(ip, port) {
     document.querySelector('[name="ip"]').value = ip;
+    document.querySelector('[name="onvif_port"]').value = port;
     openTab('auto-tab');
 }
 </script>

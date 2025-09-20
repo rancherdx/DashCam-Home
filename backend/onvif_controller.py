@@ -97,3 +97,50 @@ class ONVIFController:
         if camera_id in self.clients:
             del self.clients[camera_id]
             logger.info(f"Disconnected from ONVIF camera {camera_id}")
+
+    def get_imaging_settings(self, camera_id: str) -> Optional[Dict]:
+        """Gets imaging settings for a camera."""
+        if camera_id not in self.clients:
+            return None
+        try:
+            imaging_service = self.clients[camera_id].create_imaging_service()
+            video_sources = self.clients[camera_id].get_video_sources()
+            video_source_token = video_sources[0].token
+            settings = imaging_service.GetImagingSettings({'VideoSourceToken': video_source_token})
+            return {
+                'brightness': settings.Brightness,
+                'contrast': settings.Contrast,
+                'saturation': settings.ColorSaturation
+            }
+        except Exception as e:
+            logger.error(f"Failed to get imaging settings for camera {camera_id}: {e}")
+            return None
+
+    def set_imaging_settings(self, camera_id: str, settings: Dict) -> bool:
+        """Sets imaging settings for a camera."""
+        if camera_id not in self.clients:
+            return False
+        try:
+            imaging_service = self.clients[camera_id].create_imaging_service()
+            video_sources = self.clients[camera_id].get_video_sources()
+            video_source_token = video_sources[0].token
+
+            # Get current settings to modify
+            current_settings = imaging_service.GetImagingSettings({'VideoSourceToken': video_source_token})
+
+            # Update settings
+            if 'brightness' in settings:
+                current_settings.Brightness = settings['brightness']
+            if 'contrast' in settings:
+                current_settings.Contrast = settings['contrast']
+            if 'saturation' in settings:
+                current_settings.ColorSaturation = settings['saturation']
+
+            imaging_service.SetImagingSettings({
+                'VideoSourceToken': video_source_token,
+                'ImagingSettings': current_settings
+            })
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set imaging settings for camera {camera_id}: {e}")
+            return False
